@@ -443,6 +443,25 @@ button.secondary:disabled { opacity: 0.4; cursor: not-allowed; }
   margin-top: 0.45rem;
 }
 .q-stats b { color: var(--text); }
+.q-stats-main { margin-bottom: 0.3rem; }
+.wrong-answers {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.wa-label { color: var(--muted); margin-right: 0.15rem; }
+.wrong-answer-chip {
+  display: inline-block;
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  border: 1px solid #fecaca;
+}
 .history-summary { font-size: 0.95rem; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
 .history-summary b { color: var(--text); }
 .hint-info {

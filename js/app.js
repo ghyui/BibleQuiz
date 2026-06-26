@@ -101,6 +101,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       if (!currentData.attempts) currentData.attempts = {};
       if (!currentData.hints) currentData.hints = {};
       if (!currentData.lastAt) currentData.lastAt = {};
+      if (!currentData.wrongAnswers) currentData.wrongAnswers = {};
       // One-time backfill: history exists but attempts missing for that qid
       let backfilled = false;
       for (const [id, hist] of Object.entries(currentData.history || {})) {
@@ -136,7 +137,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     }
   }
 
-  function recordAnswer(q, correct) {
+  function recordAnswer(q, correct, userAnswer) {
     if (!getCurrentUser()) return;
     const id = qid(q);
     if (!currentData.attempts) currentData.attempts = {};
@@ -157,9 +158,27 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     if (currentData.history[id].length > MAX_HISTORY) {
       currentData.history[id] = currentData.history[id].slice(-MAX_HISTORY);
     }
+    // Track wrong answers (what user typed/picked) — keep last 5
+    if (!correct && userAnswer != null && String(userAnswer).trim() !== "") {
+      if (!currentData.wrongAnswers) currentData.wrongAnswers = {};
+      if (!currentData.wrongAnswers[id]) currentData.wrongAnswers[id] = [];
+      currentData.wrongAnswers[id].push(String(userAnswer));
+      if (currentData.wrongAnswers[id].length > 5) {
+        currentData.wrongAnswers[id] = currentData.wrongAnswers[id].slice(-5);
+      }
+    }
+    // Wrong-notebook rules:
+    // - Add on any wrong answer
+    // - Remove ONLY when the last 5 history entries are all "O"
     const wrongSet = new Set(currentData.wrong);
-    if (correct) wrongSet.delete(id);
-    else wrongSet.add(id);
+    if (correct) {
+      const last5 = currentData.history[id].slice(-5);
+      if (last5.length >= 5 && last5.every((r) => r === "O")) {
+        wrongSet.delete(id);
+      }
+    } else {
+      wrongSet.add(id);
+    }
     currentData.wrong = Array.from(wrongSet);
     persistCurrentUserData(); // fire-and-forget
   }
@@ -585,7 +604,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       if (items[correct]) items[correct].classList.add("correct");
       for (const item of items) item.classList.add("disabled");
       markWrong(`오답 (정답: ${items[correct]?.textContent ?? ""})`);
-      recordAnswer(q, false);
+      const wrongPicked = li.textContent || "";
+      recordAnswer(q, false, wrongPicked);
       updateModeLabel();
     }
   }
@@ -941,20 +961,25 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     }
   }
 
-  function questionStatsHtml(q, attempts, history, hints, wrongSet) {
+  function questionStatsHtml(q, attempts, history, hints, wrongSet, wrongAnswers) {
     const id = qid(q);
     const a = attempts[id] || { total: 0, correct: 0 };
     const h = history[id] || [];
     const inWrong = wrongSet.has(id);
     const hi = hints?.[id];
-    if (a.total === 0 && !inWrong && !hi) return null;
+    const wa = (wrongAnswers && wrongAnswers[id]) || [];
+    if (a.total === 0 && !inWrong && !hi && wa.length === 0) return null;
     const pips = h.map((r) => `<span class="pip pip-${r === "O" ? "o" : "x"}">${r}</span>`).join("");
+    const rate = a.total > 0 ? Math.round((a.correct / a.total) * 100) : 0;
     const hintLabels = { 0: "—", 1: "글자수", 2: "초성", 3: "첫 글자" };
     const hintInfo = hi && hi.maxLevel > 0
       ? ` · <span class="hint-info">힌트 ${hi.maxLevel}단계(${hintLabels[hi.maxLevel]}) · ${hi.clicks}회</span>`
       : "";
     const wrongBadge = inWrong ? ' <span class="badge-wrong">오답노트</span>' : "";
-    return `시도 <b>${a.total}</b> · 정답 <b>${a.correct}</b> · 최근 ${pips || '<span class="muted-text">—</span>'}${hintInfo}${wrongBadge}`;
+    const wrongAnswersLine = wa.length > 0
+      ? `<div class="wrong-answers"><span class="wa-label">오답 입력:</span> ${wa.map((x) => `<span class="wrong-answer-chip">${escapeHtml(x)}</span>`).join(" ")}</div>`
+      : "";
+    return `<div class="q-stats-main">시도 <b>${a.total}</b> · 정답 <b>${a.correct}</b> (정답률 <b>${rate}%</b>) · 최근 ${pips || '<span class="muted-text">—</span>'}${hintInfo}${wrongBadge}</div>${wrongAnswersLine}`;
   }
 
   function questionCardHtml(q, statsHtml) {
@@ -984,6 +1009,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     const history = u.history || {};
     const hints = u.hints || {};
     const lastAt = u.lastAt || {};
+    const wrongAnswers = u.wrongAnswers || {};
     const wrongSet = new Set(u.wrong || []);
     const sorted = [...(window.QUESTIONS || [])].sort((a, b) => {
       const ta = lastAt[qid(a)] || 0;
@@ -991,7 +1017,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       return tb - ta; // most recent first
     });
     const rows = sorted.map((q) => {
-      const stats = questionStatsHtml(q, attempts, history, hints, wrongSet);
+      const stats = questionStatsHtml(q, attempts, history, hints, wrongSet, wrongAnswers);
       if (!stats) return "";
       return questionCardHtml(q, stats);
     }).filter(Boolean).join("");
@@ -1015,6 +1041,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       history: currentData.history || {},
       attempts: currentData.attempts || {},
       hints: currentData.hints || {},
+      lastAt: currentData.lastAt || {},
+      wrongAnswers: currentData.wrongAnswers || {},
       wrong: currentData.wrong || [],
     };
     const eff = effectiveAttempts(u.history, u.attempts);
