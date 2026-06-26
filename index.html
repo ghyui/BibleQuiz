@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>성경 퀴즈 (소년부)</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>성경 퀴즈</h1>
+    <p class="subtitle">소년부 예상 문제</p>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="quiz">퀴즈 풀기</button>
+      <button class="tab-btn" data-tab="browse">문제집 보기</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="quiz" class="tab-panel active">
+      <div id="quiz-start" class="card">
+        <h2>퀴즈 시작</h2>
+        <p>문제 수를 선택하세요.</p>
+        <div class="controls">
+          <label>문제 수
+            <select id="quiz-count">
+              <option value="5">5문제</option>
+              <option value="10" selected>10문제</option>
+              <option value="20">20문제</option>
+              <option value="0">전체</option>
+            </select>
+          </label>
+          <button id="start-btn" class="primary">시작</button>
+        </div>
+      </div>
+
+      <div id="quiz-play" class="card hidden">
+        <div class="progress">
+          <span id="q-index">1</span> / <span id="q-total">10</span>
+        </div>
+        <h2 id="q-text">문제</h2>
+        <ul id="q-options" class="options"></ul>
+        <div class="quiz-footer">
+          <span id="q-feedback" class="feedback"></span>
+          <button id="next-btn" class="primary" disabled>다음</button>
+        </div>
+      </div>
+
+      <div id="quiz-result" class="card hidden">
+        <h2>결과</h2>
+        <p class="score">점수: <span id="score">0</span> / <span id="score-total">0</span></p>
+        <button id="restart-btn" class="primary">다시 풀기</button>
+      </div>
+    </section>
+
+    <section id="browse" class="tab-panel">
+      <div class="card">
+        <h2>문제집</h2>
+        <input id="search" type="search" placeholder="문제 또는 정답 검색..." />
+        <ol id="question-list" class="question-list"></ol>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <small>© 2026 성경 퀴즈</small>
+  </footer>
+
+  <script src="js/questions.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
