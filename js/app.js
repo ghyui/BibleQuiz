@@ -139,6 +139,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
 
   function recordAnswer(q, correct, userAnswer) {
     if (practiceMode) practiceTotalAttempts++;
+    if (q && q.noTrack) return; // 주기도문 등 메타 문제는 사용자 기록에 누적하지 않음
     if (!getCurrentUser()) return;
     const id = qid(q);
     if (!currentData.attempts) currentData.attempts = {};
@@ -389,10 +390,31 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   }
 
   const PRESETS = {
-    practice: { count: 0,  mode: "practice", type: "all" },
-    exam:     { count: 10, mode: "exam",     type: "all" },
-    wrong:    { count: 0,  mode: "wrong",    type: "all" },
+    practice:    { count: 0,  mode: "practice",    type: "all" },
+    exam:        { count: 10, mode: "exam",        type: "all" },
+    wrong:       { count: 0,  mode: "wrong",       type: "all" },
+    lordsprayer: { count: 0,  mode: "lordsprayer", type: "all" },
   };
+
+  // 주기도문 (마태복음 6:9-13, 개역개정)
+  const LORDS_PRAYER = "하늘에 계신 우리 아버지여 이름이 거룩히 여김을 받으시오며 나라가 임하시오며 뜻이 하늘에서 이루어진 것 같이 땅에서도 이루어지이다 오늘 우리에게 일용할 양식을 주시옵고 우리가 우리에게 죄 지은 자를 사하여 준 것 같이 우리 죄를 사하여 주시옵고 우리를 시험에 들게 하지 마시옵고 다만 악에서 구하시옵소서";
+
+  function makeLordsPrayerQuestion(blanks = 10) {
+    const words = LORDS_PRAYER.split(" ");
+    const n = Math.min(blanks, words.length);
+    const picked = new Set();
+    while (picked.size < n) picked.add(Math.floor(Math.random() * words.length));
+    const sorted = Array.from(picked).sort((a, b) => a - b);
+    const answers = sorted.map((i) => words[i]);
+    const blanked = words.map((w, i) => (picked.has(i) ? "(   )" : w));
+    return {
+      type: "sa",
+      q: blanked.join(" "),
+      answer: answers.join(" / "),
+      ref: "주기도문 · 마태복음 6:9-13 (개역개정)",
+      noTrack: true,
+    };
+  }
   function startQuiz(presetName) {
     const preset = PRESETS[presetName] || PRESETS.quick10;
     const count = preset.count;
@@ -412,7 +434,9 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
 
     practiceMode = (mode === "practice");
     examMode = (mode === "exam");
-    if (practiceMode) {
+    if (mode === "lordsprayer") {
+      pool = [makeLordsPrayerQuestion(10)];
+    } else if (practiceMode) {
       pool = all;
       practiceTarget = pool.length;
       practiceTotalAttempts = 0;
