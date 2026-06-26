@@ -100,6 +100,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       currentData = await fetchUserData(name);
       if (!currentData.attempts) currentData.attempts = {};
       if (!currentData.hints) currentData.hints = {};
+      if (!currentData.lastAt) currentData.lastAt = {};
       // One-time backfill: history exists but attempts missing for that qid
       let backfilled = false;
       for (const [id, hist] of Object.entries(currentData.history || {})) {
@@ -149,6 +150,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     }
     currentData.attempts[id].total++;
     if (correct) currentData.attempts[id].correct++;
+    if (!currentData.lastAt) currentData.lastAt = {};
+    currentData.lastAt[id] = Date.now();
     if (!currentData.history[id]) currentData.history[id] = [];
     currentData.history[id].push(correct ? "O" : "X");
     if (currentData.history[id].length > MAX_HISTORY) {
@@ -980,8 +983,14 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     const attempts = effectiveAttempts(u.history, u.attempts);
     const history = u.history || {};
     const hints = u.hints || {};
+    const lastAt = u.lastAt || {};
     const wrongSet = new Set(u.wrong || []);
-    const rows = (window.QUESTIONS || []).map((q) => {
+    const sorted = [...(window.QUESTIONS || [])].sort((a, b) => {
+      const ta = lastAt[qid(a)] || 0;
+      const tb = lastAt[qid(b)] || 0;
+      return tb - ta; // most recent first
+    });
+    const rows = sorted.map((q) => {
       const stats = questionStatsHtml(q, attempts, history, hints, wrongSet);
       if (!stats) return "";
       return questionCardHtml(q, stats);

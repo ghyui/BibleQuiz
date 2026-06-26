@@ -27,12 +27,13 @@ export async function fetchUserData(name) {
       wrong: d.wrong || [],
       attempts: d.attempts || {},
       hints: d.hints || {},
+      lastAt: d.lastAt || {},
       firstSeenAt: d.firstSeenAt || null,
       lastLoginAt: d.lastLoginAt || null,
       updatedAt: d.updatedAt || null,
     };
   }
-  return { history: {}, wrong: [], attempts: {}, hints: {} };
+  return { history: {}, wrong: [], attempts: {}, hints: {}, lastAt: {} };
 }
 
 export async function pushUserData(name, data) {
@@ -42,6 +43,7 @@ export async function pushUserData(name, data) {
     wrong: data.wrong || [],
     attempts: data.attempts || {},
     hints: data.hints || {},
+    lastAt: data.lastAt || {},
     updatedAt: Date.now(),
   }, { merge: true });
 }
