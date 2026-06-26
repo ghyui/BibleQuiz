@@ -58,16 +58,49 @@ import { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } from "./fi
     return h.toString(36);
   }
 
+  function effectiveAttempts(history, attempts) {
+    history = history || {};
+    attempts = attempts || {};
+    const out = {};
+    const ids = new Set([...Object.keys(history), ...Object.keys(attempts)]);
+    ids.forEach((id) => {
+      const s = attempts[id];
+      if (s && (s.total || 0) > 0) {
+        out[id] = s;
+      } else {
+        const h = history[id] || [];
+        out[id] = {
+          total: h.length,
+          correct: h.filter((r) => r === "O").length,
+        };
+      }
+    });
+    return out;
+  }
+
   async function loadCurrentUserData() {
     const name = getCurrentUser();
     if (!name) { currentData = { history: {}, wrong: [] }; dataReady = false; return; }
     dataReady = false;
     try {
       currentData = await fetchUserData(name);
+      if (!currentData.attempts) currentData.attempts = {};
+      // One-time backfill: history exists but attempts missing for that qid
+      let backfilled = false;
+      for (const [id, hist] of Object.entries(currentData.history || {})) {
+        if (!currentData.attempts[id]) {
+          currentData.attempts[id] = {
+            total: hist.length,
+            correct: hist.filter((r) => r === "O").length,
+          };
+          backfilled = true;
+        }
+      }
+      if (backfilled) persistCurrentUserData(); // fire-and-forget
       dataReady = true;
     } catch (e) {
       console.error("Firestore load failed:", e);
-      currentData = { history: {}, wrong: [] };
+      currentData = { history: {}, wrong: [], attempts: {} };
       dataReady = false;
     }
   }
@@ -90,15 +123,22 @@ import { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } from "./fi
   function recordAnswer(q, correct) {
     if (!getCurrentUser()) return;
     const id = qid(q);
+    if (!currentData.attempts) currentData.attempts = {};
+    if (!currentData.attempts[id]) {
+      // Seed from history so existing pre-update activity isn't lost
+      const prev = currentData.history?.[id] || [];
+      currentData.attempts[id] = {
+        total: prev.length,
+        correct: prev.filter((r) => r === "O").length,
+      };
+    }
+    currentData.attempts[id].total++;
+    if (correct) currentData.attempts[id].correct++;
     if (!currentData.history[id]) currentData.history[id] = [];
     currentData.history[id].push(correct ? "O" : "X");
     if (currentData.history[id].length > MAX_HISTORY) {
       currentData.history[id] = currentData.history[id].slice(-MAX_HISTORY);
     }
-    if (!currentData.attempts) currentData.attempts = {};
-    if (!currentData.attempts[id]) currentData.attempts[id] = { total: 0, correct: 0 };
-    currentData.attempts[id].total++;
-    if (correct) currentData.attempts[id].correct++;
     const wrongSet = new Set(currentData.wrong);
     if (correct) wrongSet.delete(id);
     else wrongSet.add(id);
@@ -806,7 +846,8 @@ import { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } from "./fi
 
     let totT = 0, totC = 0;
     users.forEach((u) => {
-      Object.values(u.attempts || {}).forEach((a) => {
+      const eff = effectiveAttempts(u.history, u.attempts);
+      Object.values(eff).forEach((a) => {
         totT += a.total || 0;
         totC += a.correct || 0;
       });
@@ -816,7 +857,7 @@ import { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } from "./fi
     users.sort((a, b) => (b.updatedAt || b.lastLoginAt || 0) - (a.updatedAt || a.lastLoginAt || 0));
     adminEls.users.innerHTML = "";
     users.forEach((u) => {
-      const attempts = u.attempts || {};
+      const attempts = effectiveAttempts(u.history, u.attempts);
       const userTot = Object.values(attempts).reduce((s, a) => s + (a.total || 0), 0);
       const userCorrect = Object.values(attempts).reduce((s, a) => s + (a.correct || 0), 0);
       const distinct = Object.keys(attempts).length;
@@ -859,7 +900,7 @@ import { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } from "./fi
   }
 
   function renderUserDetail(u, qmap) {
-    const attempts = u.attempts || {};
+    const attempts = effectiveAttempts(u.history, u.attempts);
     const history = u.history || {};
     const wrongSet = new Set(u.wrong || []);
     const rows = (window.QUESTIONS || []).map((q) => {
