@@ -21,6 +21,170 @@
   }
   function normalize(s) { return (s || "").trim().replace(/\s+/g, " "); }
   function equalAnswer(a, b) { return normalize(a) === normalize(b); }
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+  }
+
+  // ---------- Storage ----------
+  const LS_USER = "bq_currentUser";
+  const LS_USERS = "bq_users";
+  const MAX_HISTORY = 10;
+
+  function getCurrentUser() { return localStorage.getItem(LS_USER) || ""; }
+  function setCurrentUser(name) {
+    localStorage.setItem(LS_USER, name);
+    const users = getKnownUsers();
+    if (!users.includes(name)) {
+      users.push(name);
+      localStorage.setItem(LS_USERS, JSON.stringify(users));
+    }
+  }
+  function getKnownUsers() {
+    try { return JSON.parse(localStorage.getItem(LS_USERS) || "[]"); } catch { return []; }
+  }
+  function loadUserData(name) {
+    try {
+      const raw = localStorage.getItem("bq_user_" + name);
+      const obj = raw ? JSON.parse(raw) : {};
+      if (!obj.history) obj.history = {};
+      if (!obj.wrong) obj.wrong = [];
+      return obj;
+    } catch { return { history: {}, wrong: [] }; }
+  }
+  function saveUserData(name, data) {
+    localStorage.setItem("bq_user_" + name, JSON.stringify(data));
+  }
+  function qid(q) {
+    let h = 5381;
+    const s = q.q;
+    for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+  function recordAnswer(q, correct) {
+    const name = getCurrentUser();
+    if (!name) return;
+    const data = loadUserData(name);
+    const id = qid(q);
+    if (!data.history[id]) data.history[id] = [];
+    data.history[id].push(correct ? "O" : "X");
+    if (data.history[id].length > MAX_HISTORY) data.history[id] = data.history[id].slice(-MAX_HISTORY);
+    const wrongSet = new Set(data.wrong);
+    if (correct) wrongSet.delete(id);
+    else wrongSet.add(id);
+    data.wrong = Array.from(wrongSet);
+    saveUserData(name, data);
+  }
+  function getWrongIds() {
+    const name = getCurrentUser();
+    if (!name) return new Set();
+    return new Set(loadUserData(name).wrong || []);
+  }
+  function getHistoryFor(q) {
+    const name = getCurrentUser();
+    if (!name) return [];
+    return loadUserData(name).history[qid(q)] || [];
+  }
+  function getWrongCount() {
+    const name = getCurrentUser();
+    if (!name) return 0;
+    return (loadUserData(name).wrong || []).length;
+  }
+
+  // ---------- Element refs ----------
+  const els = {
+    // user
+    userLabel: $("#user-label"),
+    userChangeBtn: $("#user-change-btn"),
+    userModal: $("#user-modal"),
+    userNameInput: $("#user-name-input"),
+    userNameSubmit: $("#user-name-submit"),
+    userList: $("#user-list"),
+    userListLabel: $("#user-list-label"),
+    // quiz
+    startCard: $("#quiz-start"),
+    playCard: $("#quiz-play"),
+    resultCard: $("#quiz-result"),
+    startBtn: $("#start-btn"),
+    nextBtn: $("#next-btn"),
+    restartBtn: $("#restart-btn"),
+    quizCount: $("#quiz-count"),
+    quizType: $("#quiz-type"),
+    quizMode: $("#quiz-mode"),
+    qIndex: $("#q-index"),
+    qTotal: $("#q-total"),
+    qTypeBadge: $("#q-type-badge"),
+    qHistory: $("#q-history"),
+    qText: $("#q-text"),
+    qSaQuestion: $("#q-sa-question"),
+    qOptions: $("#q-options"),
+    qSa: $("#q-sa"),
+    submitBtn: $("#submit-btn"),
+    hintBtn: $("#hint-btn"),
+    hintLabel: $("#hint-level"),
+    qHint: $("#q-hint"),
+    qFeedback: $("#q-feedback"),
+    score: $("#score"),
+    scoreTotal: $("#score-total"),
+  };
+
+  // ---------- User UI ----------
+  function showUserModal(prefill) {
+    els.userModal.classList.remove("hidden");
+    els.userNameInput.value = prefill || getCurrentUser() || "";
+    renderUserList();
+    setTimeout(() => els.userNameInput.focus(), 0);
+  }
+  function hideUserModal() { els.userModal.classList.add("hidden"); }
+  function renderUserList() {
+    const users = getKnownUsers();
+    const current = getCurrentUser();
+    if (users.length === 0) {
+      els.userListLabel.classList.add("hidden");
+      els.userList.innerHTML = "";
+      return;
+    }
+    els.userListLabel.classList.remove("hidden");
+    els.userList.innerHTML = "";
+    users.forEach((u) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "user-chip" + (u === current ? " is-current" : "");
+      chip.textContent = u;
+      chip.addEventListener("click", () => {
+        els.userNameInput.value = u;
+        submitUserName();
+      });
+      els.userList.appendChild(chip);
+    });
+  }
+  function submitUserName() {
+    const name = els.userNameInput.value.trim();
+    if (!name) { els.userNameInput.focus(); return; }
+    setCurrentUser(name);
+    hideUserModal();
+    updateUserUI();
+  }
+  function updateUserUI() {
+    const name = getCurrentUser();
+    if (name) {
+      els.userLabel.textContent = `사용자: ${name}`;
+      els.userLabel.classList.remove("hidden");
+      els.userChangeBtn.classList.remove("hidden");
+    } else {
+      els.userLabel.classList.add("hidden");
+      els.userChangeBtn.classList.add("hidden");
+    }
+    updateModeLabel();
+  }
+  function updateModeLabel() {
+    const opt = els.quizMode.querySelector('option[value="wrong"]');
+    if (opt) opt.textContent = `오답노트만 (${getWrongCount()})`;
+  }
+  els.userNameSubmit.addEventListener("click", submitUserName);
+  els.userNameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); submitUserName(); }
+  });
+  els.userChangeBtn.addEventListener("click", () => showUserModal());
 
   // ---------- Tabs ----------
   $$(".tab-btn").forEach((btn) => {
@@ -38,31 +202,6 @@
   let score = 0;
   let answered = false;
   let hintLevel = 0;
-
-  const els = {
-    startCard: $("#quiz-start"),
-    playCard: $("#quiz-play"),
-    resultCard: $("#quiz-result"),
-    startBtn: $("#start-btn"),
-    nextBtn: $("#next-btn"),
-    restartBtn: $("#restart-btn"),
-    quizCount: $("#quiz-count"),
-    quizType: $("#quiz-type"),
-    qIndex: $("#q-index"),
-    qTotal: $("#q-total"),
-    qTypeBadge: $("#q-type-badge"),
-    qText: $("#q-text"),
-    qSaQuestion: $("#q-sa-question"),
-    qOptions: $("#q-options"),
-    qSa: $("#q-sa"),
-    submitBtn: $("#submit-btn"),
-    hintBtn: $("#hint-btn"),
-    hintLabel: $("#hint-level"),
-    qHint: $("#q-hint"),
-    qFeedback: $("#q-feedback"),
-    score: $("#score"),
-    scoreTotal: $("#score-total"),
-  };
 
   const BLANK_RE = /\(\s+\)/g;
   function splitExpected(answer) {
@@ -117,7 +256,6 @@
     }
     return a;
   }
-
   function getAllQuestions() {
     return (window.QUESTIONS || []).map((q) => ({ type: q.type || "mc", ...q }));
   }
@@ -125,12 +263,21 @@
   function startQuiz() {
     const count = parseInt(els.quizCount.value, 10);
     const typeFilter = els.quizType.value;
+    const mode = els.quizMode.value;
     let all = getAllQuestions();
+    if (mode === "wrong") {
+      const wrongIds = getWrongIds();
+      all = all.filter((q) => wrongIds.has(qid(q)));
+      if (all.length === 0) {
+        alert("오답노트가 비어 있습니다. 문제를 풀어 틀린 문제가 모이면 여기서 다시 풀 수 있어요.");
+        return;
+      }
+    }
     if (typeFilter !== "all") all = all.filter((q) => q.type === typeFilter);
     all = shuffle(all);
     pool = count > 0 ? all.slice(0, count) : all;
     if (pool.length === 0) {
-      alert("선택한 유형의 문제가 없습니다.");
+      alert("선택한 조건의 문제가 없습니다.");
       return;
     }
     idx = 0;
@@ -139,6 +286,28 @@
     els.resultCard.classList.add("hidden");
     els.playCard.classList.remove("hidden");
     renderQuestion();
+  }
+
+  function renderHistory(q) {
+    const hist = getHistoryFor(q);
+    els.qHistory.innerHTML = "";
+    if (hist.length === 0) {
+      const muted = document.createElement("span");
+      muted.className = "muted-text small";
+      muted.textContent = "최근 기록 없음";
+      els.qHistory.appendChild(muted);
+      return;
+    }
+    const label = document.createElement("span");
+    label.className = "history-label";
+    label.textContent = "최근: ";
+    els.qHistory.appendChild(label);
+    hist.forEach((r) => {
+      const pip = document.createElement("span");
+      pip.className = `pip pip-${r === "O" ? "o" : "x"}`;
+      pip.textContent = r;
+      els.qHistory.appendChild(pip);
+    });
   }
 
   function renderQuestion() {
@@ -153,6 +322,7 @@
     const q = pool[idx];
     els.qIndex.textContent = String(idx + 1);
     els.qTotal.textContent = String(pool.length);
+    renderHistory(q);
 
     if (q.type === "sa") {
       els.qTypeBadge.textContent = "주관식";
@@ -166,7 +336,6 @@
       els.hintBtn.disabled = false;
       const firstInput = els.qSaQuestion.querySelector(".blank-input");
       firstInput?.focus();
-      // Enter key submits from any blank
       els.qSaQuestion.querySelectorAll(".blank-input").forEach((inp) => {
         inp.addEventListener("keydown", (e) => {
           if (e.key === "Enter") { e.preventDefault(); submitSA(); }
@@ -195,14 +364,18 @@
     answered = true;
     const items = els.qOptions.children;
     for (const item of items) item.classList.add("disabled");
+    const q = pool[idx];
     if (chosen === correct) {
       li.classList.add("correct");
       markCorrect("정답!");
+      recordAnswer(q, true);
     } else {
       li.classList.add("wrong");
       if (items[correct]) items[correct].classList.add("correct");
       markWrong(`오답 (정답: ${items[correct]?.textContent ?? ""})`);
+      recordAnswer(q, false);
     }
+    updateModeLabel();
   }
 
   function submitSA() {
@@ -224,7 +397,6 @@
     let allCorrect = false;
 
     if (expected.length === inputs.length) {
-      // per-blank compare
       allCorrect = true;
       inputs.forEach((inp, i) => {
         const ok = equalAnswer(userValues[i], expected[i]);
@@ -235,17 +407,15 @@
         }
       });
     } else {
-      // count mismatch — compare concatenated
       const userJoined = userValues.map((v) => v.trim()).filter(Boolean).join(" / ");
       allCorrect = equalAnswer(userJoined, q.answer);
       inputs.forEach((inp) => inp.classList.add(allCorrect ? "correct" : "wrong"));
     }
 
-    if (allCorrect) {
-      markCorrect("정답!");
-    } else {
-      markWrong(`오답 (정답: ${q.answer})`);
-    }
+    if (allCorrect) markCorrect("정답!");
+    else markWrong(`오답 (정답: ${q.answer})`);
+    recordAnswer(q, allCorrect);
+    updateModeLabel();
   }
 
   function markCorrect(msg) {
@@ -274,17 +444,12 @@
     hintLevel++;
     const labels = { 1: "글자수", 2: "초성", 3: "첫 글자" };
     els.hintLabel.textContent = `(${hintLevel}/3 · ${labels[hintLevel]})`;
-
     const inputs = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
     const expected = splitExpected(q.answer);
-
     if (expected.length === inputs.length) {
-      inputs.forEach((inp, i) => {
-        inp.placeholder = hintFor(expected[i], hintLevel);
-      });
+      inputs.forEach((inp, i) => { inp.placeholder = hintFor(expected[i], hintLevel); });
       els.qHint.textContent = "";
     } else {
-      // fallback: count mismatch — show a single combined hint below
       els.qHint.textContent = `힌트(${labels[hintLevel]}): ${hintFor(q.answer, hintLevel)}`;
     }
     if (hintLevel === 3) els.hintBtn.disabled = true;
@@ -295,14 +460,13 @@
     if (idx >= pool.length) showResult();
     else renderQuestion();
   }
-
   function showResult() {
     els.playCard.classList.add("hidden");
     els.resultCard.classList.remove("hidden");
     els.score.textContent = String(score);
     els.scoreTotal.textContent = String(pool.length);
+    updateModeLabel();
   }
-
   function restart() {
     els.resultCard.classList.add("hidden");
     els.startCard.classList.remove("hidden");
@@ -317,13 +481,12 @@
   // ---------- Browse ----------
   const browseType = $("#browse-type");
   const search = $("#search");
-
   function renderList() {
     const ol = $("#question-list");
     ol.innerHTML = "";
     const f = normalize(search.value).toLowerCase();
     const tf = browseType.value;
-    getAllQuestions().forEach((q, i) => {
+    getAllQuestions().forEach((q) => {
       if (tf !== "all" && q.type !== tf) return;
       const ans = q.type === "mc" ? (q.options?.[q.answer] ?? "") : String(q.answer);
       const text = (q.q + " " + ans).toLowerCase();
@@ -335,8 +498,7 @@
         : "";
       li.innerHTML = `
         <div class="q-row">
-          <span class="type-badge ${q.type}">${typeLabel}</span>
-          <span class="q-body">${escapeHtml(q.q)}</span>
+          <span class="type-badge ${q.type}">${typeLabel}</span><span class="q-body">${escapeHtml(q.q)}</span>
         </div>
         ${optionsHtml}
         <div class="answer-row"><span class="answer">정답: ${escapeHtml(ans)}</span>${q.ref ? `<span class="ref">${escapeHtml(q.ref)}</span>` : ""}</div>
@@ -344,12 +506,14 @@
       ol.appendChild(li);
     });
   }
-
-  function escapeHtml(s) {
-    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
-  }
-
   search.addEventListener("input", renderList);
   browseType.addEventListener("change", renderList);
   renderList();
+
+  // ---------- Init ----------
+  if (!getCurrentUser()) {
+    showUserModal();
+  } else {
+    updateUserUI();
+  }
 })();
