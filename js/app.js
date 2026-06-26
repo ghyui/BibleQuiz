@@ -202,6 +202,8 @@
   let score = 0;
   let answered = false;
   let hintLevel = 0;
+  let attempts = 0; // 0 = no submit yet, 1 = first wrong (retry chance), 2 = final
+  const MAX_ATTEMPTS = 2;
 
   const BLANK_RE = /\(\s+\)/g;
   function splitExpected(answer) {
@@ -313,11 +315,13 @@
   function renderQuestion() {
     answered = false;
     hintLevel = 0;
+    attempts = 0;
     els.nextBtn.disabled = true;
     els.qFeedback.textContent = "";
     els.qFeedback.className = "feedback";
-    els.qHint.textContent = "";
+    els.qHint.innerHTML = "";
     els.hintLabel.textContent = "(0/3)";
+    els.submitBtn.textContent = "제출";
 
     const q = pool[idx];
     els.qIndex.textContent = String(idx + 1);
@@ -361,21 +365,33 @@
 
   function selectMC(li, chosen, correct) {
     if (answered) return;
-    answered = true;
+    if (li.classList.contains("disabled")) return;
     const items = els.qOptions.children;
-    for (const item of items) item.classList.add("disabled");
     const q = pool[idx];
+
     if (chosen === correct) {
+      answered = true;
       li.classList.add("correct");
-      markCorrect("정답!");
+      for (const item of items) item.classList.add("disabled");
+      markCorrect(attempts === 0 ? "정답!" : "정답! (재시도 성공)");
       recordAnswer(q, true);
+      updateModeLabel();
+      return;
+    }
+
+    // wrong pick
+    attempts++;
+    li.classList.add("wrong", "disabled");
+    if (attempts < MAX_ATTEMPTS) {
+      markRetry("오답 — 한 번 더 골라보세요!");
     } else {
-      li.classList.add("wrong");
+      answered = true;
       if (items[correct]) items[correct].classList.add("correct");
+      for (const item of items) item.classList.add("disabled");
       markWrong(`오답 (정답: ${items[correct]?.textContent ?? ""})`);
       recordAnswer(q, false);
+      updateModeLabel();
     }
-    updateModeLabel();
   }
 
   function submitSA() {
@@ -388,46 +404,117 @@
       inputs[0].focus();
       return;
     }
-    answered = true;
-    inputs.forEach((inp) => (inp.disabled = true));
-    els.submitBtn.disabled = true;
-    els.hintBtn.disabled = true;
 
-    const expected = String(q.answer).split(/\s*\/\s*/);
-    let allCorrect = false;
+    const expected = splitExpected(q.answer);
+    const perBlank = (expected.length === inputs.length);
+    const blankResults = inputs.map((inp, i) => {
+      const exp = perBlank ? expected[i] : null;
+      const ok = perBlank ? equalAnswer(userValues[i], exp) : false;
+      return { input: inp, user: userValues[i], expected: exp, ok };
+    });
 
-    if (expected.length === inputs.length) {
-      allCorrect = true;
-      inputs.forEach((inp, i) => {
-        const ok = equalAnswer(userValues[i], expected[i]);
-        inp.classList.add(ok ? "correct" : "wrong");
-        if (!ok) {
-          inp.title = `정답: ${expected[i]}`;
-          allCorrect = false;
-        }
-      });
+    let allCorrect;
+    if (perBlank) {
+      allCorrect = blankResults.every((r) => r.ok);
     } else {
       const userJoined = userValues.map((v) => v.trim()).filter(Boolean).join(" / ");
       allCorrect = equalAnswer(userJoined, q.answer);
+    }
+
+    // Apply per-blank visuals
+    inputs.forEach((inp) => inp.classList.remove("correct", "wrong"));
+    if (perBlank) {
+      blankResults.forEach((r) => {
+        r.input.classList.add(r.ok ? "correct" : "wrong");
+        if (r.ok) r.input.disabled = true;
+      });
+    } else {
       inputs.forEach((inp) => inp.classList.add(allCorrect ? "correct" : "wrong"));
     }
 
-    if (allCorrect) markCorrect("정답!");
-    else markWrong(`오답 (정답: ${q.answer})`);
-    recordAnswer(q, allCorrect);
-    updateModeLabel();
+    if (allCorrect) {
+      answered = true;
+      inputs.forEach((inp) => (inp.disabled = true));
+      els.submitBtn.disabled = true;
+      els.hintBtn.disabled = true;
+      markCorrect(attempts === 0 ? "정답!" : "정답! (재시도 성공)");
+      els.qHint.innerHTML = "";
+      recordAnswer(q, true);
+      updateModeLabel();
+      return;
+    }
+
+    // wrong
+    attempts++;
+    showCharDiffs(blankResults);
+
+    if (attempts < MAX_ATTEMPTS) {
+      markRetry("오답 — 한 번 더 시도해 보세요!");
+      els.submitBtn.textContent = "재시도";
+      const firstWrong = blankResults.find((r) => !r.ok);
+      if (firstWrong) { firstWrong.input.focus(); firstWrong.input.select(); }
+    } else {
+      answered = true;
+      inputs.forEach((inp) => (inp.disabled = true));
+      els.submitBtn.disabled = true;
+      els.hintBtn.disabled = true;
+      markWrong(`오답 (정답: ${q.answer})`);
+      recordAnswer(q, false);
+      updateModeLabel();
+    }
+  }
+
+  function showCharDiffs(blankResults) {
+    els.qHint.innerHTML = "";
+    blankResults.forEach((r, i) => {
+      if (r.ok) return;
+      const row = document.createElement("div");
+      row.className = "retry-hint-row";
+      const label = document.createElement("span");
+      label.className = "muted-text small";
+      label.textContent = blankResults.length > 1 ? `${i + 1}번 빈칸 — ` : "내가 쓴 답 — ";
+      row.appendChild(label);
+      const diff = renderCharDiff(r.user, r.expected || "");
+      row.appendChild(diff);
+      els.qHint.appendChild(row);
+    });
+  }
+  function renderCharDiff(userText, correctText) {
+    const wrap = document.createElement("span");
+    wrap.className = "char-diff";
+    const userChars = Array.from(userText);
+    const correctChars = Array.from(correctText);
+    if (userChars.length === 0) {
+      const s = document.createElement("span");
+      s.className = "muted-text";
+      s.textContent = "(빈칸)";
+      wrap.appendChild(s);
+      return wrap;
+    }
+    userChars.forEach((ch, i) => {
+      const s = document.createElement("span");
+      s.textContent = ch;
+      s.className = (ch === correctChars[i]) ? "char-ok" : "char-bad";
+      wrap.appendChild(s);
+    });
+    return wrap;
   }
 
   function markCorrect(msg) {
     els.qFeedback.textContent = msg;
-    els.qFeedback.classList.add("correct");
+    els.qFeedback.className = "feedback correct";
     score++;
     els.nextBtn.disabled = false;
   }
   function markWrong(msg) {
     els.qFeedback.textContent = msg;
-    els.qFeedback.classList.add("wrong");
+    els.qFeedback.className = "feedback wrong";
     els.nextBtn.disabled = false;
+  }
+  function markRetry(msg) {
+    els.qFeedback.textContent = msg;
+    els.qFeedback.className = "feedback retry";
+    els.nextBtn.disabled = true; // can't proceed until retry resolves
   }
 
   function hintFor(answerPart, level) {
