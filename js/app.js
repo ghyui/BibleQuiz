@@ -138,6 +138,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   }
 
   function recordAnswer(q, correct, userAnswer) {
+    if (practiceMode) practiceTotalAttempts++;
     if (!getCurrentUser()) return;
     const id = qid(q);
     if (!currentData.attempts) currentData.attempts = {};
@@ -321,6 +322,9 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   let attempts = 0; // 0 = no submit yet, 1 = first wrong (retry chance), 2 = final
   const MAX_ATTEMPTS = 2;
   const stateByIdx = new Map(); // per-question saved state for back/forward nav
+  let practiceMode = false;
+  let practiceTarget = 0;   // initial question count
+  let practiceTotalAttempts = 0;
 
   const BLANK_RE = /\(\s+\)/g;
   function splitExpected(answer) {
@@ -397,7 +401,15 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     }
     if (typeFilter !== "all") all = all.filter((q) => q.type === typeFilter);
     all = shuffle(all);
-    pool = count > 0 ? all.slice(0, count) : all;
+
+    practiceMode = (mode === "practice");
+    if (practiceMode) {
+      pool = all;
+      practiceTarget = pool.length;
+      practiceTotalAttempts = 0;
+    } else {
+      pool = count > 0 ? all.slice(0, count) : all;
+    }
     if (pool.length === 0) {
       alert("선택한 조건의 문제가 없습니다.");
       return;
@@ -518,8 +530,14 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     els.submitBtn.textContent = "제출";
 
     const q = pool[idx];
-    els.qIndex.textContent = String(idx + 1);
-    els.qTotal.textContent = String(pool.length);
+    if (practiceMode) {
+      const done = practiceTarget - pool.length;
+      els.qIndex.textContent = `남은 ${pool.length}`;
+      els.qTotal.textContent = `${practiceTarget} (완료 ${done})`;
+    } else {
+      els.qIndex.textContent = String(idx + 1);
+      els.qTotal.textContent = String(pool.length);
+    }
     renderHistory(q);
 
     if (q.type === "sa") {
@@ -575,7 +593,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     }
 
     // Nav buttons
-    els.prevBtn.disabled = idx === 0;
+    els.prevBtn.disabled = practiceMode || idx === 0;
   }
 
   function selectMC(li, chosen, correct) {
@@ -790,21 +808,47 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   }
 
   function prevQuestion() {
+    if (practiceMode) return;
     if (idx === 0) return;
     captureCurrentState();
     idx--;
     renderQuestion();
   }
   function nextQuestion() {
+    if (practiceMode) { nextPractice(); return; }
     captureCurrentState();
     if (idx + 1 >= pool.length) showResult();
     else { idx++; renderQuestion(); }
   }
+  function nextPractice() {
+    const wasCorrect = stateByIdx.get(idx)?.correct === true;
+    if (wasCorrect) {
+      // remove this question from the practice pool
+      pool.splice(idx, 1);
+    } else {
+      // keep in pool but move to end so it doesn't immediately reappear
+      const cur = pool.splice(idx, 1)[0];
+      pool.push(cur);
+    }
+    if (pool.length === 0) {
+      showResult();
+      return;
+    }
+    pool = shuffle(pool);
+    idx = 0;
+    stateByIdx.clear();
+    renderQuestion();
+  }
   function showResult() {
     els.playCard.classList.add("hidden");
     els.resultCard.classList.remove("hidden");
-    els.score.textContent = String(calcScore());
-    els.scoreTotal.textContent = String(pool.length);
+    if (practiceMode) {
+      els.score.textContent = String(practiceTarget);
+      els.scoreTotal.textContent = `${practiceTarget} · 총 시도 ${practiceTotalAttempts}회`;
+    } else {
+      els.score.textContent = String(calcScore());
+      els.scoreTotal.textContent = String(pool.length);
+    }
     updateModeLabel();
   }
   function restart() {
