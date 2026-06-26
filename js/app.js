@@ -339,6 +339,9 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   function makeBlankInput(idx, expectedPart) {
     const wrap = document.createElement("span");
     wrap.className = "blank-wrap";
+    const badge = document.createElement("span");
+    badge.className = "blank-hint hidden";
+    wrap.appendChild(badge);
     const input = document.createElement("input");
     input.type = "text";
     input.className = "blank-input";
@@ -413,6 +416,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       answer: answers.join(" / "),
       ref: "주기도문 · 마태복음 6:9-13 (개역개정)",
       noTrack: true,
+      partialScoring: true,
     };
   }
   function startQuiz(presetName) {
@@ -509,6 +513,19 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
         inp.className = saved.classList || "blank-input";
         inp.title = saved.title || "";
       });
+      // Restore per-blank hint chips if hint level > 0
+      if ((s.hintLevel || 0) > 0) {
+        const q = pool[idx];
+        const expected = splitExpected(q.answer);
+        if (expected.length === inputs.length) {
+          inputs.forEach((inp, i) => {
+            const badge = inp.parentElement?.querySelector(".blank-hint");
+            if (!badge) return;
+            badge.textContent = hintFor(expected[i], s.hintLevel);
+            badge.classList.remove("hidden");
+          });
+        }
+      }
     } else if (s.type === "mc" && s.mcOptions) {
       const items = Array.from(els.qOptions.children);
       s.mcOptions.forEach((saved, i) => {
@@ -530,7 +547,19 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   }
   function calcScore() {
     let n = 0;
-    stateByIdx.forEach((s) => { if (s.correct === true) n++; });
+    stateByIdx.forEach((s) => {
+      if (s.partialScore) n += s.partialScore.correct || 0;
+      else if (s.correct === true) n++;
+    });
+    return n;
+  }
+  function calcMaxScore() {
+    let n = 0;
+    pool.forEach((q, i) => {
+      const s = stateByIdx.get(i);
+      if (s && s.partialScore) n += s.partialScore.total || 1;
+      else n += 1;
+    });
     return n;
   }
 
@@ -708,6 +737,34 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       inputs.forEach((inp) => inp.classList.add(allCorrect ? "correct" : "wrong"));
     }
 
+    // Partial-scoring mode (e.g. 주기도문): single submission, per-blank scoring
+    if (q.partialScoring && perBlank) {
+      const correctCount = blankResults.filter((r) => r.ok).length;
+      const total = blankResults.length;
+      answered = true;
+      inputs.forEach((inp) => (inp.disabled = true));
+      els.submitBtn.disabled = true;
+      els.hintBtn.disabled = true;
+      blankResults.forEach((r) => {
+        r.input.classList.remove("correct", "wrong");
+        r.input.classList.add(r.ok ? "correct" : "wrong");
+        if (!r.ok) r.input.title = `정답: ${r.expected}`;
+      });
+      showCharDiffs(blankResults);
+      const partialMsg = correctCount === total
+        ? "완벽! 모두 정답!"
+        : `${correctCount} / ${total} 정답`;
+      if (correctCount === total) markCorrect(partialMsg);
+      else markWrong(partialMsg);
+      const st = stateByIdx.get(idx) || {};
+      st.partialScore = { correct: correctCount, total };
+      stateByIdx.set(idx, st);
+      setUserAnswerStr(userValues.map((v) => v.trim()).join(" / "));
+      recordAnswer(q, correctCount === total, userValues.map((v) => v.trim()).join(" / "));
+      updateModeLabel();
+      return;
+    }
+
     if (allCorrect) {
       answered = true;
       inputs.forEach((inp) => (inp.disabled = true));
@@ -830,30 +887,30 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     const inputs = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
     const expected = splitExpected(q.answer);
 
-    // Append a new row instead of clearing — previous levels stay visible
-    const row = document.createElement("div");
-    row.className = "hint-row-line";
-    const head = document.createElement("span");
-    head.className = "hint-head";
-    head.textContent = `힌트(${labels[hintLevel]}): `;
-    row.appendChild(head);
-
     if (expected.length === inputs.length) {
-      expected.forEach((part, i) => {
-        const tag = document.createElement("span");
-        tag.className = "hint-tag";
-        tag.textContent = inputs.length > 1
-          ? `${i + 1}) ${hintFor(part, hintLevel)}`
-          : hintFor(part, hintLevel);
-        row.appendChild(tag);
+      // Place per-blank hint chip ABOVE each input (replaces previous level chip)
+      inputs.forEach((inp, i) => {
+        const badge = inp.parentElement?.querySelector(".blank-hint");
+        if (!badge) return;
+        badge.textContent = hintFor(expected[i], hintLevel);
+        badge.classList.remove("hidden");
       });
+      els.qHint.innerHTML = "";
     } else {
+      // Count mismatch fallback — show single hint in the bottom area
+      els.qHint.innerHTML = "";
+      const row = document.createElement("div");
+      row.className = "hint-row-line";
+      const head = document.createElement("span");
+      head.className = "hint-head";
+      head.textContent = `힌트(${labels[hintLevel]}): `;
+      row.appendChild(head);
       const tag = document.createElement("span");
       tag.className = "hint-tag";
       tag.textContent = hintFor(q.answer, hintLevel);
       row.appendChild(tag);
+      els.qHint.appendChild(row);
     }
-    els.qHint.appendChild(row);
     if (hintLevel === 3) els.hintBtn.disabled = true;
   }
 
@@ -899,7 +956,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       els.resultReport.innerHTML = "";
     } else {
       els.score.textContent = String(calcScore());
-      els.scoreTotal.textContent = String(pool.length);
+      els.scoreTotal.textContent = String(calcMaxScore());
       if (examMode) renderExamReport();
       else { els.resultReport.classList.add("hidden"); els.resultReport.innerHTML = ""; }
     }
