@@ -631,7 +631,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     // wrong pick
     attempts++;
     li.classList.add("wrong", "disabled");
-    if (attempts < MAX_ATTEMPTS) {
+    const maxAttemptsMC = examMode ? 1 : MAX_ATTEMPTS;
+    if (attempts < maxAttemptsMC) {
       markRetry("오답 — 한 번 더 골라보세요!");
     } else {
       answered = true;
@@ -700,7 +701,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     attempts++;
     showCharDiffs(blankResults);
 
-    if (attempts < MAX_ATTEMPTS) {
+    const maxAttemptsSA = examMode ? 1 : MAX_ATTEMPTS;
+    if (attempts < maxAttemptsSA) {
       markRetry("오답 — 한 번 더 시도해 보세요!");
       els.submitBtn.textContent = "재시도";
       const firstWrong = blankResults.find((r) => !r.ok);
@@ -759,12 +761,17 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     els.qFeedback.className = "feedback correct";
     els.nextBtn.disabled = false;
     setResult(true);
+    focusNextBtnSoon();
   }
   function markWrong(msg) {
     els.qFeedback.textContent = msg;
     els.qFeedback.className = "feedback wrong";
     els.nextBtn.disabled = false;
     setResult(false);
+    focusNextBtnSoon();
+  }
+  function focusNextBtnSoon() {
+    setTimeout(() => { try { els.nextBtn.focus(); } catch {} }, 0);
   }
   function markRetry(msg) {
     els.qFeedback.textContent = msg;
