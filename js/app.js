@@ -1,3 +1,5 @@
+import { fetchUserData, pushUserData } from "./firebase.js";
+
 (() => {
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
@@ -25,10 +27,16 @@
     return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
   }
 
-  // ---------- Storage ----------
-  const LS_USER = "bq_currentUser";
-  const LS_USERS = "bq_users";
+  // ---------- Storage (Firestore + localStorage cache for UX bits) ----------
+  const LS_USER = "bq_currentUser";   // last-logged-in name on THIS browser
+  const LS_USERS = "bq_users";        // chip list for THIS browser (UX only)
   const MAX_HISTORY = 10;
+
+  // In-memory cache of current user's data; synced to Firestore
+  let currentData = { history: {}, wrong: [] };
+  let dataReady = false;
+  let savePending = false;
+  let saveQueued = false;
 
   function getCurrentUser() { return localStorage.getItem(LS_USER) || ""; }
   function setCurrentUser(name) {
@@ -42,52 +50,64 @@
   function getKnownUsers() {
     try { return JSON.parse(localStorage.getItem(LS_USERS) || "[]"); } catch { return []; }
   }
-  function loadUserData(name) {
-    try {
-      const raw = localStorage.getItem("bq_user_" + name);
-      const obj = raw ? JSON.parse(raw) : {};
-      if (!obj.history) obj.history = {};
-      if (!obj.wrong) obj.wrong = [];
-      return obj;
-    } catch { return { history: {}, wrong: [] }; }
-  }
-  function saveUserData(name, data) {
-    localStorage.setItem("bq_user_" + name, JSON.stringify(data));
-  }
   function qid(q) {
     let h = 5381;
     const s = q.q;
     for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
     return h.toString(36);
   }
-  function recordAnswer(q, correct) {
+
+  async function loadCurrentUserData() {
+    const name = getCurrentUser();
+    if (!name) { currentData = { history: {}, wrong: [] }; dataReady = false; return; }
+    dataReady = false;
+    try {
+      currentData = await fetchUserData(name);
+      dataReady = true;
+    } catch (e) {
+      console.error("Firestore load failed:", e);
+      currentData = { history: {}, wrong: [] };
+      dataReady = false;
+    }
+  }
+
+  async function persistCurrentUserData() {
     const name = getCurrentUser();
     if (!name) return;
-    const data = loadUserData(name);
+    if (savePending) { saveQueued = true; return; }
+    savePending = true;
+    try {
+      await pushUserData(name, currentData);
+    } catch (e) {
+      console.error("Firestore save failed:", e);
+    } finally {
+      savePending = false;
+      if (saveQueued) { saveQueued = false; persistCurrentUserData(); }
+    }
+  }
+
+  function recordAnswer(q, correct) {
+    if (!getCurrentUser()) return;
     const id = qid(q);
-    if (!data.history[id]) data.history[id] = [];
-    data.history[id].push(correct ? "O" : "X");
-    if (data.history[id].length > MAX_HISTORY) data.history[id] = data.history[id].slice(-MAX_HISTORY);
-    const wrongSet = new Set(data.wrong);
+    if (!currentData.history[id]) currentData.history[id] = [];
+    currentData.history[id].push(correct ? "O" : "X");
+    if (currentData.history[id].length > MAX_HISTORY) {
+      currentData.history[id] = currentData.history[id].slice(-MAX_HISTORY);
+    }
+    const wrongSet = new Set(currentData.wrong);
     if (correct) wrongSet.delete(id);
     else wrongSet.add(id);
-    data.wrong = Array.from(wrongSet);
-    saveUserData(name, data);
+    currentData.wrong = Array.from(wrongSet);
+    persistCurrentUserData(); // fire-and-forget
   }
   function getWrongIds() {
-    const name = getCurrentUser();
-    if (!name) return new Set();
-    return new Set(loadUserData(name).wrong || []);
+    return new Set(currentData.wrong || []);
   }
   function getHistoryFor(q) {
-    const name = getCurrentUser();
-    if (!name) return [];
-    return loadUserData(name).history[qid(q)] || [];
+    return currentData.history[qid(q)] || [];
   }
   function getWrongCount() {
-    const name = getCurrentUser();
-    if (!name) return 0;
-    return (loadUserData(name).wrong || []).length;
+    return (currentData.wrong || []).length;
   }
 
   // ---------- Element refs ----------
@@ -157,17 +177,19 @@
       els.userList.appendChild(chip);
     });
   }
-  function submitUserName() {
+  async function submitUserName() {
     const name = els.userNameInput.value.trim();
     if (!name) { els.userNameInput.focus(); return; }
     setCurrentUser(name);
     hideUserModal();
-    updateUserUI();
+    updateUserUI(true);
+    await loadCurrentUserData();
+    updateUserUI(false);
   }
-  function updateUserUI() {
+  function updateUserUI(loading) {
     const name = getCurrentUser();
     if (name) {
-      els.userLabel.textContent = `사용자: ${name}`;
+      els.userLabel.textContent = loading ? `사용자: ${name} (불러오는 중…)` : `사용자: ${name}`;
       els.userLabel.classList.remove("hidden");
       els.userChangeBtn.classList.remove("hidden");
     } else {
@@ -598,9 +620,13 @@
   renderList();
 
   // ---------- Init ----------
-  if (!getCurrentUser()) {
-    showUserModal();
-  } else {
-    updateUserUI();
-  }
+  (async () => {
+    if (!getCurrentUser()) {
+      showUserModal();
+    } else {
+      updateUserUI(true);
+      await loadCurrentUserData();
+      updateUserUI(false);
+    }
+  })();
 })();
