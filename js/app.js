@@ -24,6 +24,17 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     const arr = Array.from(s);
     return arr.map((ch, i) => (i === 0 ? ch : (/\s/.test(ch) ? " " : "○"))).join("");
   }
+  // Level-3 hint: first char as-is, rest as chosung (cumulative reveal over 초성)
+  function firstCharPlusChosung(s) {
+    const arr = Array.from(s);
+    return arr.map((ch, i) => {
+      if (i === 0) return ch;
+      if (/\s/.test(ch)) return " ";
+      const code = ch.charCodeAt(0);
+      if (isHangulSyllable(code)) return CHOSUNG[Math.floor((code - 0xAC00) / 588)];
+      return ch;
+    }).join("");
+  }
   function normalize(s) { return (s || "").trim().replace(/\s+/g, " "); }
   function equalAnswer(a, b) { return normalize(a) === normalize(b); }
   function escapeHtml(s) {
@@ -712,7 +723,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   function hintFor(answerPart, level) {
     if (level === 1) return maskAll(answerPart);
     if (level === 2) return toChosung(answerPart);
-    if (level === 3) return maskExceptFirst(answerPart);
+    if (level === 3) return firstCharPlusChosung(answerPart);
     return "";
   }
   function showHint() {
