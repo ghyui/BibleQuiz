@@ -46,17 +46,17 @@
           <span><span id="q-index">1</span> / <span id="q-total">10</span></span>
           <span id="q-type-badge" class="type-badge"></span>
         </div>
-        <h2 id="q-text">문제</h2>
+        <h2 id="q-text" class="hidden">문제</h2>
+        <div id="q-sa-question" class="sa-question hidden"></div>
 
         <ul id="q-options" class="options hidden"></ul>
 
         <div id="q-sa" class="sa hidden">
-          <div class="sa-row">
-            <input id="q-answer-input" type="text" placeholder="정답을 입력하세요" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <div class="sa-actions">
             <button id="submit-btn" class="primary">제출</button>
+            <button id="hint-btn" class="secondary" type="button">힌트 보기 <span id="hint-level">(0/3)</span></button>
           </div>
           <div class="hint-row">
-            <button id="hint-btn" class="secondary" type="button">힌트 보기 <span id="hint-level">(0/3)</span></button>
             <span id="q-hint" class="hint"></span>
           </div>
         </div>

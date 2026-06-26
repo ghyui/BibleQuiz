@@ -135,26 +135,50 @@ button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
 .options li.disabled { cursor: default; }
 
 .sa { margin: 1rem 0; }
-.sa-row {
+.sa-question {
+  font-size: 1.15rem;
+  line-height: 2.4;
+  margin: 0.5rem 0 1.25rem;
+  white-space: pre-wrap;
+  word-break: keep-all;
+}
+
+.blank-input {
+  display: inline-block;
+  min-width: 3em;
+  padding: 0.25rem 0.4rem;
+  margin: 0 0.2rem;
+  border: 1.5px solid var(--primary);
+  border-radius: 4px;
+  background: #fff8e6;
+  font-size: 1rem;
+  font-family: inherit;
+  vertical-align: baseline;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  box-sizing: content-box;
+}
+.blank-input::placeholder { color: #b45309; opacity: 0.55; font-family: "Segoe UI Mono", Consolas, monospace; letter-spacing: 0.1em; }
+.blank-input:focus { background: #fef3c7; border-color: var(--accent); }
+.blank-input:disabled { background: #f3f4f6; color: var(--muted); border-color: var(--border); }
+.blank-input.correct { border-color: var(--correct); background: #dcfce7; color: #14532d; }
+.blank-input.wrong { border-color: var(--wrong); background: #fee2e2; color: #7f1d1d; }
+
+.sa-actions {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
 }
-.sa-row input {
-  flex: 1;
-  padding: 0.6rem 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 1rem;
-}
-.sa-row input:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: var(--primary); }
-.sa-row input:disabled { background: #f3f4f6; color: var(--muted); }
 
 .hint-row {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  min-height: 1.5rem;
 }
 button.secondary {
   background: white;
@@ -210,10 +234,14 @@ button.secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 .question-list { padding-left: 1.25rem; }
 .question-list li { margin-bottom: 1.25rem; }
 .question-list .q-row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: baseline;
   margin-bottom: 0.4rem;
+  line-height: 1.7;
+}
+.question-list .q-row .type-badge {
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .question-list .q-body { font-weight: 500; }
 .question-list .mini-options {

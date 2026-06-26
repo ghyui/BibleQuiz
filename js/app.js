@@ -52,9 +52,9 @@
     qTotal: $("#q-total"),
     qTypeBadge: $("#q-type-badge"),
     qText: $("#q-text"),
+    qSaQuestion: $("#q-sa-question"),
     qOptions: $("#q-options"),
     qSa: $("#q-sa"),
-    qInput: $("#q-answer-input"),
     submitBtn: $("#submit-btn"),
     hintBtn: $("#hint-btn"),
     hintLabel: $("#hint-level"),
@@ -63,6 +63,51 @@
     score: $("#score"),
     scoreTotal: $("#score-total"),
   };
+
+  const BLANK_RE = /\(\s+\)/g;
+  function splitExpected(answer) {
+    return String(answer).split(/\s*\/\s*/).map((s) => s.trim()).filter(Boolean);
+  }
+  function visibleLen(s) {
+    return Array.from(String(s)).filter((c) => !/\s/.test(c)).length;
+  }
+  function makeBlankInput(idx, expectedPart) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "blank-input";
+    input.dataset.idx = String(idx);
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    if (expectedPart) {
+      const n = Math.max(visibleLen(expectedPart), 2);
+      input.style.width = (n * 1.15 + 0.8) + "em";
+      input.dataset.expectedLen = String(visibleLen(expectedPart));
+    } else {
+      input.style.width = "6em";
+    }
+    return input;
+  }
+  function renderSAWithBlanks(qText, qAnswer, container) {
+    container.innerHTML = "";
+    const expected = splitExpected(qAnswer);
+    const matches = [...qText.matchAll(BLANK_RE)];
+    if (matches.length === 0) {
+      container.appendChild(document.createTextNode(qText + " "));
+      container.appendChild(makeBlankInput(0, qAnswer));
+      return 1;
+    }
+    let lastIdx = 0;
+    matches.forEach((m, i) => {
+      const before = qText.slice(lastIdx, m.index);
+      if (before) container.appendChild(document.createTextNode(before));
+      const ep = expected.length === matches.length ? expected[i] : null;
+      container.appendChild(makeBlankInput(i, ep));
+      lastIdx = m.index + m[0].length;
+    });
+    const after = qText.slice(lastIdx);
+    if (after) container.appendChild(document.createTextNode(after));
+    return matches.length;
+  }
 
   function shuffle(arr) {
     const a = arr.slice();
@@ -108,22 +153,32 @@
     const q = pool[idx];
     els.qIndex.textContent = String(idx + 1);
     els.qTotal.textContent = String(pool.length);
-    els.qText.textContent = q.q;
 
     if (q.type === "sa") {
       els.qTypeBadge.textContent = "주관식";
       els.qTypeBadge.className = "type-badge sa";
+      els.qText.classList.add("hidden");
       els.qOptions.classList.add("hidden");
+      els.qSaQuestion.classList.remove("hidden");
       els.qSa.classList.remove("hidden");
-      els.qInput.value = "";
-      els.qInput.disabled = false;
+      renderSAWithBlanks(q.q, q.answer, els.qSaQuestion);
       els.submitBtn.disabled = false;
       els.hintBtn.disabled = false;
-      els.qInput.focus();
+      const firstInput = els.qSaQuestion.querySelector(".blank-input");
+      firstInput?.focus();
+      // Enter key submits from any blank
+      els.qSaQuestion.querySelectorAll(".blank-input").forEach((inp) => {
+        inp.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); submitSA(); }
+        });
+      });
     } else {
       els.qTypeBadge.textContent = "객관식";
       els.qTypeBadge.className = "type-badge mc";
       els.qSa.classList.add("hidden");
+      els.qSaQuestion.classList.add("hidden");
+      els.qText.classList.remove("hidden");
+      els.qText.textContent = q.q;
       els.qOptions.classList.remove("hidden");
       els.qOptions.innerHTML = "";
       (q.options || []).forEach((opt, i) => {
@@ -153,16 +208,40 @@
   function submitSA() {
     if (answered) return;
     const q = pool[idx];
-    const user = els.qInput.value;
-    if (!user.trim()) {
-      els.qInput.focus();
+    const inputs = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
+    if (inputs.length === 0) return;
+    const userValues = inputs.map((inp) => inp.value);
+    if (userValues.every((v) => !v.trim())) {
+      inputs[0].focus();
       return;
     }
     answered = true;
-    els.qInput.disabled = true;
+    inputs.forEach((inp) => (inp.disabled = true));
     els.submitBtn.disabled = true;
     els.hintBtn.disabled = true;
-    if (equalAnswer(user, q.answer)) {
+
+    const expected = String(q.answer).split(/\s*\/\s*/);
+    let allCorrect = false;
+
+    if (expected.length === inputs.length) {
+      // per-blank compare
+      allCorrect = true;
+      inputs.forEach((inp, i) => {
+        const ok = equalAnswer(userValues[i], expected[i]);
+        inp.classList.add(ok ? "correct" : "wrong");
+        if (!ok) {
+          inp.title = `정답: ${expected[i]}`;
+          allCorrect = false;
+        }
+      });
+    } else {
+      // count mismatch — compare concatenated
+      const userJoined = userValues.map((v) => v.trim()).filter(Boolean).join(" / ");
+      allCorrect = equalAnswer(userJoined, q.answer);
+      inputs.forEach((inp) => inp.classList.add(allCorrect ? "correct" : "wrong"));
+    }
+
+    if (allCorrect) {
       markCorrect("정답!");
     } else {
       markWrong(`오답 (정답: ${q.answer})`);
@@ -181,22 +260,34 @@
     els.nextBtn.disabled = false;
   }
 
+  function hintFor(answerPart, level) {
+    if (level === 1) return maskAll(answerPart);
+    if (level === 2) return toChosung(answerPart);
+    if (level === 3) return maskExceptFirst(answerPart);
+    return "";
+  }
   function showHint() {
     if (answered) return;
     const q = pool[idx];
     if (q.type !== "sa") return;
     if (hintLevel >= 3) return;
     hintLevel++;
-    els.hintLabel.textContent = `(${hintLevel}/3)`;
-    const ans = String(q.answer);
-    if (hintLevel === 1) {
-      els.qHint.textContent = `힌트(글자수): ${maskAll(ans)} — ${Array.from(ans).filter((c) => !/\s/.test(c)).length}글자`;
-    } else if (hintLevel === 2) {
-      els.qHint.textContent = `힌트(초성): ${toChosung(ans)}`;
-    } else if (hintLevel === 3) {
-      els.qHint.textContent = `힌트(첫 글자): ${maskExceptFirst(ans)}`;
-      els.hintBtn.disabled = true;
+    const labels = { 1: "글자수", 2: "초성", 3: "첫 글자" };
+    els.hintLabel.textContent = `(${hintLevel}/3 · ${labels[hintLevel]})`;
+
+    const inputs = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
+    const expected = splitExpected(q.answer);
+
+    if (expected.length === inputs.length) {
+      inputs.forEach((inp, i) => {
+        inp.placeholder = hintFor(expected[i], hintLevel);
+      });
+      els.qHint.textContent = "";
+    } else {
+      // fallback: count mismatch — show a single combined hint below
+      els.qHint.textContent = `힌트(${labels[hintLevel]}): ${hintFor(q.answer, hintLevel)}`;
     }
+    if (hintLevel === 3) els.hintBtn.disabled = true;
   }
 
   function nextQuestion() {
@@ -222,9 +313,6 @@
   els.restartBtn.addEventListener("click", restart);
   els.submitBtn.addEventListener("click", submitSA);
   els.hintBtn.addEventListener("click", showHint);
-  els.qInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); submitSA(); }
-  });
 
   // ---------- Browse ----------
   const browseType = $("#browse-type");
