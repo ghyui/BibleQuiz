@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
   <title>성경퀴즈 예상 문제</title>
-  <link rel="stylesheet" href="css/style.css?v=20260626g" />
+  <link rel="stylesheet" href="css/style.css?v=20260626h" />
 </head>
 <body>
   <header class="site-header">
@@ -18,6 +18,7 @@
     <nav class="tabs">
       <button class="tab-btn active" data-tab="quiz">퀴즈 풀기</button>
       <button class="tab-btn" data-tab="browse">문제집 보기</button>
+      <button class="tab-btn" data-tab="history">히스토리</button>
       <button class="tab-btn admin-only hidden" data-tab="admin">관리자</button>
     </nav>
   </header>
@@ -131,6 +132,14 @@
       </div>
     </section>
 
+    <section id="history" class="tab-panel">
+      <div class="card">
+        <h2>내 히스토리</h2>
+        <div id="history-summary" class="history-summary muted-text"></div>
+        <div id="history-detail"></div>
+      </div>
+    </section>
+
     <section id="admin" class="tab-panel">
       <div class="card">
         <h2>관리자</h2>
@@ -147,7 +156,7 @@
     <small>© 2026 성경퀴즈 예상 문제</small>
   </footer>
 
-  <script src="js/questions.js?v=20260626g"></script>
-  <script type="module" src="js/app.js?v=20260626g"></script>
+  <script src="js/questions.js?v=20260626h"></script>
+  <script type="module" src="js/app.js?v=20260626h"></script>
 </body>
 </html>

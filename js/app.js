@@ -881,9 +881,6 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   }
 
   function drawAdminUsers(users) {
-    const qmap = new Map();
-    (window.QUESTIONS || []).forEach((q) => qmap.set(qid(q), q));
-
     let totT = 0, totC = 0;
     users.forEach((u) => {
       const eff = effectiveAttempts(u.history, u.attempts);
@@ -926,7 +923,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       const detail = card.querySelector(".admin-user-detail");
       toggle.addEventListener("click", () => {
         if (detail.classList.contains("hidden")) {
-          detail.innerHTML = renderUserDetail(u, qmap);
+          detail.innerHTML = renderUserDetail(u);
           detail.classList.remove("hidden");
           toggle.textContent = "상세 ▴";
         } else {
@@ -941,43 +938,87 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     }
   }
 
-  function renderUserDetail(u, qmap) {
+  function questionStatsHtml(q, attempts, history, hints, wrongSet) {
+    const id = qid(q);
+    const a = attempts[id] || { total: 0, correct: 0 };
+    const h = history[id] || [];
+    const inWrong = wrongSet.has(id);
+    const hi = hints?.[id];
+    if (a.total === 0 && !inWrong && !hi) return null;
+    const pips = h.map((r) => `<span class="pip pip-${r === "O" ? "o" : "x"}">${r}</span>`).join("");
+    const hintLabels = { 0: "—", 1: "글자수", 2: "초성", 3: "첫 글자" };
+    const hintInfo = hi && hi.maxLevel > 0
+      ? ` · <span class="hint-info">힌트 ${hi.maxLevel}단계(${hintLabels[hi.maxLevel]}) · ${hi.clicks}회</span>`
+      : "";
+    const wrongBadge = inWrong ? ' <span class="badge-wrong">오답노트</span>' : "";
+    return `시도 <b>${a.total}</b> · 정답 <b>${a.correct}</b> · 최근 ${pips || '<span class="muted-text">—</span>'}${hintInfo}${wrongBadge}`;
+  }
+
+  function questionCardHtml(q, statsHtml) {
+    const typeLabel = q.type === "sa" ? "주관식" : "객관식";
+    const qHtml = q.type === "sa" ? saQuestionHtml(q) : escapeHtml(q.q);
+    const optionsHtml = q.type === "mc" && Array.isArray(q.options)
+      ? `<ul class="mini-options">${q.options.map((o, oi) => `<li${oi === q.answer ? ' class="is-answer"' : ""}>${escapeHtml(o)}</li>`).join("")}</ul>`
+      : "";
+    const ans = q.type === "mc" ? (q.options?.[q.answer] ?? "") : String(q.answer);
+    const answerRow = q.type === "mc"
+      ? `<div class="answer-row"><span class="answer">정답: ${escapeHtml(ans)}</span>${q.ref ? `<span class="ref">${escapeHtml(q.ref)}</span>` : ""}</div>`
+      : (q.ref ? `<div class="answer-row"><span class="ref">${escapeHtml(q.ref)}</span></div>` : "");
+    return `
+      <div class="q-stat-card">
+        <div class="q-row">
+          <span class="type-badge ${q.type}">${typeLabel}</span><span class="q-body">${qHtml}</span>
+        </div>
+        ${optionsHtml}
+        ${answerRow}
+        ${statsHtml ? `<div class="q-stats">${statsHtml}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function renderUserDetail(u) {
     const attempts = effectiveAttempts(u.history, u.attempts);
     const history = u.history || {};
     const hints = u.hints || {};
     const wrongSet = new Set(u.wrong || []);
-    const hintLabels = { 0: "—", 1: "글자수", 2: "초성", 3: "첫 글자" };
     const rows = (window.QUESTIONS || []).map((q) => {
-      const id = qid(q);
-      const a = attempts[id] || { total: 0, correct: 0 };
-      const h = history[id] || [];
-      const inWrong = wrongSet.has(id);
-      const hi = hints[id];
-      if (a.total === 0 && !inWrong && !hi) return "";
-      const pips = h.map((r) => `<span class="pip pip-${r === "O" ? "o" : "x"}">${r}</span>`).join("");
-      const typeLabel = q.type === "sa" ? "주관식" : "객관식";
-      const qPreview = q.q.length > 70 ? q.q.slice(0, 70) + "…" : q.q;
-      const hintInfo = hi && hi.maxLevel > 0
-        ? `<span class="hint-info">힌트 ${hi.maxLevel}단계(${hintLabels[hi.maxLevel]}) · ${hi.clicks}회</span>`
-        : "";
-      return `
-        <div class="admin-q-row">
-          <div class="admin-q-head">
-            <span class="type-badge ${q.type}">${typeLabel}</span>
-            <span class="admin-q-text">${escapeHtml(qPreview)}</span>
-            ${inWrong ? '<span class="badge-wrong">오답노트</span>' : ""}
-          </div>
-          <div class="admin-q-stats">
-            시도 <b>${a.total}</b> · 정답 <b>${a.correct}</b> · 최근 ${pips || '<span class="muted-text">—</span>'}
-            ${hintInfo}
-          </div>
-        </div>
-      `;
+      const stats = questionStatsHtml(q, attempts, history, hints, wrongSet);
+      if (!stats) return "";
+      return questionCardHtml(q, stats);
     }).filter(Boolean).join("");
     return rows || '<div class="muted-text">아직 푼 문제가 없어요.</div>';
   }
 
   adminEls.refreshBtn.addEventListener("click", renderAdmin);
+
+  // ---------- History tab ----------
+  const historyEls = {
+    summary: $("#history-summary"),
+    detail: $("#history-detail"),
+  };
+  function renderHistory() {
+    if (!getCurrentUser()) {
+      historyEls.summary.textContent = "이름을 먼저 입력해 주세요.";
+      historyEls.detail.innerHTML = "";
+      return;
+    }
+    const u = {
+      history: currentData.history || {},
+      attempts: currentData.attempts || {},
+      hints: currentData.hints || {},
+      wrong: currentData.wrong || [],
+    };
+    const eff = effectiveAttempts(u.history, u.attempts);
+    const totT = Object.values(eff).reduce((s, a) => s + (a.total || 0), 0);
+    const totC = Object.values(eff).reduce((s, a) => s + (a.correct || 0), 0);
+    const distinct = Object.keys(eff).length;
+    const rate = totT ? Math.round((totC / totT) * 100) : 0;
+    const wrongCount = u.wrong.length;
+    const hintClicks = Object.values(u.hints).reduce((s, h) => s + (h.clicks || 0), 0);
+    historyEls.summary.innerHTML =
+      `푼 문제 <b>${distinct}</b> / ${(window.QUESTIONS||[]).length}개 · 총 시도 <b>${totT}</b>회 · 정답 <b>${totC}</b>회 (${rate}%) · 오답노트 <b>${wrongCount}</b>개 · 힌트 <b>${hintClicks}</b>회`;
+    historyEls.detail.innerHTML = renderUserDetail(u);
+  }
 
   // ---------- Admin password modal ----------
   const adminModal = $("#admin-modal");
@@ -1027,6 +1068,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     document.getElementById(btn.dataset.tab).classList.add("active");
     if (btn.dataset.tab === "admin" && isAdmin() && adminUnlocked()) {
       renderAdmin();
+    } else if (btn.dataset.tab === "history") {
+      renderHistory();
     }
   }
   $$(".tab-btn").forEach((btn) => {
