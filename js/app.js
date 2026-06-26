@@ -736,11 +736,13 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     const inputs = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
     const expected = splitExpected(q.answer);
 
-    els.qHint.innerHTML = "";
+    // Append a new row instead of clearing — previous levels stay visible
+    const row = document.createElement("div");
+    row.className = "hint-row-line";
     const head = document.createElement("span");
     head.className = "hint-head";
     head.textContent = `힌트(${labels[hintLevel]}): `;
-    els.qHint.appendChild(head);
+    row.appendChild(head);
 
     if (expected.length === inputs.length) {
       expected.forEach((part, i) => {
@@ -749,9 +751,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
         tag.textContent = inputs.length > 1
           ? `${i + 1}) ${hintFor(part, hintLevel)}`
           : hintFor(part, hintLevel);
-        els.qHint.appendChild(tag);
+        row.appendChild(tag);
       });
-      // Level 3: show first char as a chip beside each blank (NOT inside input)
       if (hintLevel === 3) {
         inputs.forEach((inp, i) => {
           const badge = inp.parentElement?.querySelector(".blank-hint");
@@ -766,8 +767,9 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       const tag = document.createElement("span");
       tag.className = "hint-tag";
       tag.textContent = hintFor(q.answer, hintLevel);
-      els.qHint.appendChild(tag);
+      row.appendChild(tag);
     }
+    els.qHint.appendChild(row);
     if (hintLevel === 3) els.hintBtn.disabled = true;
   }
 

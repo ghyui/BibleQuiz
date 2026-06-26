@@ -296,6 +296,7 @@ button.secondary:disabled { opacity: 0.4; cursor: not-allowed; }
   font-size: 0.95rem;
   line-height: 2;
 }
+.hint-row-line { display: block; margin: 0.15rem 0; }
 .hint-head {
   color: var(--muted);
   font-size: 0.85rem;
