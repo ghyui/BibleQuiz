@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
   <title>성경퀴즈 예상 문제</title>
-  <link rel="stylesheet" href="css/style.css?v=20260626l" />
+  <link rel="stylesheet" href="css/style.css?v=20260626m" />
 </head>
 <body>
   <header class="site-header">
@@ -54,21 +54,17 @@
       <div id="quiz-start" class="card">
         <h2>퀴즈 시작</h2>
         <div class="mode-buttons">
-          <button class="mode-btn" data-preset="quick10" type="button">
-            <span class="mode-title">빠른 풀이</span>
-            <span class="mode-sub">랜덤 10문제</span>
+          <button class="mode-btn" data-preset="practice" type="button">
+            <span class="mode-title">연습 시작</span>
+            <span class="mode-sub">모두 맞출 때까지 · 힌트 사용 가능</span>
           </button>
-          <button class="mode-btn" data-preset="all" type="button">
-            <span class="mode-title">전체 풀기</span>
-            <span class="mode-sub">모든 문제 한 번씩</span>
+          <button class="mode-btn mode-btn-accent" data-preset="exam" type="button">
+            <span class="mode-title">실전 연습</span>
+            <span class="mode-sub">랜덤 10문제 · 힌트 없음 · 끝나면 리포트</span>
           </button>
-          <button class="mode-btn" data-preset="wrong" type="button">
+          <button class="mode-btn mode-btn-mini" data-preset="wrong" type="button">
             <span class="mode-title">오답노트만 <span id="wrong-count-label">(0)</span></span>
             <span class="mode-sub">틀린 문제만 다시 풀기</span>
-          </button>
-          <button class="mode-btn mode-btn-accent" data-preset="practice" type="button">
-            <span class="mode-title">연습 모드</span>
-            <span class="mode-sub">모두 정답일 때까지 반복</span>
           </button>
         </div>
       </div>
@@ -106,6 +102,7 @@
       <div id="quiz-result" class="card hidden">
         <h2>결과</h2>
         <p class="score">점수: <span id="score">0</span> / <span id="score-total">0</span></p>
+        <div id="result-report" class="result-report hidden"></div>
         <button id="restart-btn" class="primary">다시 풀기</button>
       </div>
     </section>
@@ -149,7 +146,7 @@
     <small>© 2026 성경퀴즈 예상 문제</small>
   </footer>
 
-  <script src="js/questions.js?v=20260626l"></script>
-  <script type="module" src="js/app.js?v=20260626l"></script>
+  <script src="js/questions.js?v=20260626m"></script>
+  <script type="module" src="js/app.js?v=20260626m"></script>
 </body>
 </html>

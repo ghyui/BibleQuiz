@@ -211,6 +211,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     prevBtn: $("#prev-btn"),
     nextBtn: $("#next-btn"),
     restartBtn: $("#restart-btn"),
+    resultReport: $("#result-report"),
     quizCount: $("#quiz-count"),
     quizType: $("#quiz-type"),
     quizMode: $("#quiz-mode"),
@@ -323,6 +324,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   const MAX_ATTEMPTS = 2;
   const stateByIdx = new Map(); // per-question saved state for back/forward nav
   let practiceMode = false;
+  let examMode = false;
   let practiceTarget = 0;   // initial question count
   let practiceTotalAttempts = 0;
 
@@ -387,10 +389,9 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   }
 
   const PRESETS = {
-    quick10:  { count: 10, mode: "all",      type: "all" },
-    all:      { count: 0,  mode: "all",      type: "all" },
-    wrong:    { count: 0,  mode: "wrong",    type: "all" },
     practice: { count: 0,  mode: "practice", type: "all" },
+    exam:     { count: 10, mode: "exam",     type: "all" },
+    wrong:    { count: 0,  mode: "wrong",    type: "all" },
   };
   function startQuiz(presetName) {
     const preset = PRESETS[presetName] || PRESETS.quick10;
@@ -410,6 +411,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     all = shuffle(all);
 
     practiceMode = (mode === "practice");
+    examMode = (mode === "exam");
     if (practiceMode) {
       pool = all;
       practiceTarget = pool.length;
@@ -497,6 +499,11 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     s.correct = correct;
     stateByIdx.set(idx, s);
   }
+  function setUserAnswerStr(text) {
+    const s = stateByIdx.get(idx) || {};
+    s.userAnswerStr = text;
+    stateByIdx.set(idx, s);
+  }
   function calcScore() {
     let n = 0;
     stateByIdx.forEach((s) => { if (s.correct === true) n++; });
@@ -557,6 +564,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       renderSAWithBlanks(q.q, q.answer, els.qSaQuestion);
       els.submitBtn.disabled = false;
       els.hintBtn.disabled = false;
+      els.hintBtn.classList.toggle("hidden", examMode);
       els.qSaQuestion.querySelectorAll(".blank-input").forEach((inp) => {
         inp.addEventListener("keydown", (e) => {
           if (e.key !== "Enter") return;
@@ -614,6 +622,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       li.classList.add("correct");
       for (const item of items) item.classList.add("disabled");
       markCorrect(attempts === 0 ? "정답!" : "정답! (재시도 성공)");
+      setUserAnswerStr(li.textContent || "");
       recordAnswer(q, true);
       updateModeLabel();
       return;
@@ -630,6 +639,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       for (const item of items) item.classList.add("disabled");
       markWrong(`오답 (정답: ${items[correct]?.textContent ?? ""})`);
       const wrongPicked = li.textContent || "";
+      setUserAnswerStr(wrongPicked);
       recordAnswer(q, false, wrongPicked);
       updateModeLabel();
     }
@@ -680,6 +690,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       els.hintBtn.disabled = true;
       markCorrect(attempts === 0 ? "정답!" : "정답! (재시도 성공)");
       els.qHint.innerHTML = "";
+      setUserAnswerStr(userValues.map((v) => v.trim()).join(" / "));
       recordAnswer(q, true);
       updateModeLabel();
       return;
@@ -701,6 +712,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       els.hintBtn.disabled = true;
       markWrong(`오답 (정답: ${q.answer})`);
       const userAnswerStr = userValues.map((v) => v.trim()).join(" / ");
+      setUserAnswerStr(userAnswerStr);
       recordAnswer(q, false, userAnswerStr);
       updateModeLabel();
     }
@@ -852,11 +864,37 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     if (practiceMode) {
       els.score.textContent = String(practiceTarget);
       els.scoreTotal.textContent = `${practiceTarget} · 총 시도 ${practiceTotalAttempts}회`;
+      els.resultReport.classList.add("hidden");
+      els.resultReport.innerHTML = "";
     } else {
       els.score.textContent = String(calcScore());
       els.scoreTotal.textContent = String(pool.length);
+      if (examMode) renderExamReport();
+      else { els.resultReport.classList.add("hidden"); els.resultReport.innerHTML = ""; }
     }
     updateModeLabel();
+  }
+
+  function renderExamReport() {
+    els.resultReport.classList.remove("hidden");
+    const cards = pool.map((q, i) => {
+      const s = stateByIdx.get(i) || {};
+      const correct = s.correct === true;
+      const userStr = (s.userAnswerStr && s.userAnswerStr.trim()) || "(미응답)";
+      const correctAns = q.type === "mc" ? (q.options?.[q.answer] ?? "") : String(q.answer);
+      const resultIcon = correct
+        ? '<span class="pip pip-o">O</span>'
+        : '<span class="pip pip-x">X</span>';
+      const userChip = correct
+        ? `<span class="user-ans-correct">${escapeHtml(userStr)}</span>`
+        : `<span class="user-ans-wrong">${escapeHtml(userStr)}</span>`;
+      const wrongHint = !correct
+        ? ` · <span class="muted-text">정답:</span> <b>${escapeHtml(correctAns)}</b>`
+        : "";
+      const stats = `<div class="q-stats-main">${resultIcon} 내 답: ${userChip}${wrongHint}</div>`;
+      return questionCardHtml(q, stats);
+    });
+    els.resultReport.innerHTML = `<h3 class="report-title">상세 리포트</h3>${cards.join("")}`;
   }
   function restart() {
     els.resultCard.classList.add("hidden");

@@ -199,6 +199,33 @@ main {
 .mode-btn-accent:hover { background: #d75a3b; }
 .mode-btn .mode-title { font-size: 1.05rem; font-weight: 700; }
 .mode-btn .mode-sub { font-size: 0.82rem; opacity: 0.88; }
+.mode-btn-mini {
+  background: #f3f4f6;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.mode-btn-mini:hover { background: #e5e7eb; }
+.mode-btn-mini .mode-title { font-size: 0.95rem; }
+.mode-btn-mini .mode-sub { color: var(--muted); }
+
+.result-report { margin: 1rem 0; }
+.report-title { font-size: 1rem; color: var(--muted); margin: 0.5rem 0; }
+.user-ans-correct {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  background: #dcfce7;
+  color: #14532d;
+  border-radius: 4px;
+  font-weight: 700;
+}
+.user-ans-wrong {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  background: #fee2e2;
+  color: #7f1d1d;
+  border-radius: 4px;
+  font-weight: 700;
+}
 
 button.primary {
   background: var(--primary);
