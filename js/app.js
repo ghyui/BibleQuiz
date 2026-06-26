@@ -125,6 +125,7 @@ import { fetchUserData, pushUserData } from "./firebase.js";
     playCard: $("#quiz-play"),
     resultCard: $("#quiz-result"),
     startBtn: $("#start-btn"),
+    prevBtn: $("#prev-btn"),
     nextBtn: $("#next-btn"),
     restartBtn: $("#restart-btn"),
     quizCount: $("#quiz-count"),
@@ -221,11 +222,11 @@ import { fetchUserData, pushUserData } from "./firebase.js";
   // ---------- Quiz state ----------
   let pool = [];
   let idx = 0;
-  let score = 0;
   let answered = false;
   let hintLevel = 0;
   let attempts = 0; // 0 = no submit yet, 1 = first wrong (retry chance), 2 = final
   const MAX_ATTEMPTS = 2;
+  const stateByIdx = new Map(); // per-question saved state for back/forward nav
 
   const BLANK_RE = /\(\s+\)/g;
   function splitExpected(answer) {
@@ -305,11 +306,85 @@ import { fetchUserData, pushUserData } from "./firebase.js";
       return;
     }
     idx = 0;
-    score = 0;
+    stateByIdx.clear();
     els.startCard.classList.add("hidden");
     els.resultCard.classList.add("hidden");
     els.playCard.classList.remove("hidden");
     renderQuestion();
+  }
+
+  function captureCurrentState() {
+    const q = pool[idx];
+    const s = {
+      type: q.type,
+      answered,
+      attempts,
+      hintLevel,
+      feedbackText: els.qFeedback.textContent,
+      feedbackClass: els.qFeedback.className,
+      hintHTML: els.qHint.innerHTML,
+      hintLabel: els.hintLabel.textContent,
+      submitText: els.submitBtn.textContent,
+      submitDisabled: els.submitBtn.disabled,
+      hintDisabled: els.hintBtn.disabled,
+      nextDisabled: els.nextBtn.disabled,
+    };
+    if (q.type === "sa") {
+      const inputs = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
+      s.saInputs = inputs.map((inp) => ({
+        value: inp.value,
+        disabled: inp.disabled,
+        classList: inp.className,
+        title: inp.title || "",
+      }));
+    } else {
+      const items = Array.from(els.qOptions.children);
+      s.mcOptions = items.map((li) => ({ classList: li.className }));
+    }
+    const prev = stateByIdx.get(idx);
+    if (prev && prev.correct !== undefined) s.correct = prev.correct;
+    stateByIdx.set(idx, s);
+  }
+
+  function restoreQuestionState(s) {
+    answered = !!s.answered;
+    attempts = s.attempts || 0;
+    hintLevel = s.hintLevel || 0;
+    els.qFeedback.textContent = s.feedbackText || "";
+    els.qFeedback.className = s.feedbackClass || "feedback";
+    els.qHint.innerHTML = s.hintHTML || "";
+    els.hintLabel.textContent = s.hintLabel || "(0/3)";
+    els.submitBtn.textContent = s.submitText || "제출";
+    els.submitBtn.disabled = !!s.submitDisabled;
+    els.hintBtn.disabled = !!s.hintDisabled;
+    els.nextBtn.disabled = !!s.nextDisabled;
+    if (s.type === "sa" && s.saInputs) {
+      const inputs = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
+      s.saInputs.forEach((saved, i) => {
+        const inp = inputs[i]; if (!inp) return;
+        inp.value = saved.value || "";
+        inp.disabled = !!saved.disabled;
+        inp.className = saved.classList || "blank-input";
+        inp.title = saved.title || "";
+      });
+    } else if (s.type === "mc" && s.mcOptions) {
+      const items = Array.from(els.qOptions.children);
+      s.mcOptions.forEach((saved, i) => {
+        const li = items[i]; if (!li) return;
+        li.className = saved.classList || "";
+      });
+    }
+  }
+
+  function setResult(correct) {
+    const s = stateByIdx.get(idx) || {};
+    s.correct = correct;
+    stateByIdx.set(idx, s);
+  }
+  function calcScore() {
+    let n = 0;
+    stateByIdx.forEach((s) => { if (s.correct === true) n++; });
+    return n;
   }
 
   function renderHistory(q) {
@@ -360,8 +435,6 @@ import { fetchUserData, pushUserData } from "./firebase.js";
       renderSAWithBlanks(q.q, q.answer, els.qSaQuestion);
       els.submitBtn.disabled = false;
       els.hintBtn.disabled = false;
-      const firstInput = els.qSaQuestion.querySelector(".blank-input");
-      firstInput?.focus();
       els.qSaQuestion.querySelectorAll(".blank-input").forEach((inp) => {
         inp.addEventListener("keydown", (e) => {
           if (e.key === "Enter") { e.preventDefault(); submitSA(); }
@@ -383,6 +456,19 @@ import { fetchUserData, pushUserData } from "./firebase.js";
         els.qOptions.appendChild(li);
       });
     }
+
+    // Restore previously visited state (back/forward nav)
+    const saved = stateByIdx.get(idx);
+    if (saved) restoreQuestionState(saved);
+
+    // Focus appropriately
+    if (q.type === "sa" && !answered) {
+      const firstEditable = els.qSaQuestion.querySelector(".blank-input:not([disabled])");
+      firstEditable?.focus();
+    }
+
+    // Nav buttons
+    els.prevBtn.disabled = idx === 0;
   }
 
   function selectMC(li, chosen, correct) {
@@ -525,13 +611,14 @@ import { fetchUserData, pushUserData } from "./firebase.js";
   function markCorrect(msg) {
     els.qFeedback.textContent = msg;
     els.qFeedback.className = "feedback correct";
-    score++;
     els.nextBtn.disabled = false;
+    setResult(true);
   }
   function markWrong(msg) {
     els.qFeedback.textContent = msg;
     els.qFeedback.className = "feedback wrong";
     els.nextBtn.disabled = false;
+    setResult(false);
   }
   function markRetry(msg) {
     els.qFeedback.textContent = msg;
@@ -581,15 +668,21 @@ import { fetchUserData, pushUserData } from "./firebase.js";
     if (hintLevel === 3) els.hintBtn.disabled = true;
   }
 
+  function prevQuestion() {
+    if (idx === 0) return;
+    captureCurrentState();
+    idx--;
+    renderQuestion();
+  }
   function nextQuestion() {
-    idx++;
-    if (idx >= pool.length) showResult();
-    else renderQuestion();
+    captureCurrentState();
+    if (idx + 1 >= pool.length) showResult();
+    else { idx++; renderQuestion(); }
   }
   function showResult() {
     els.playCard.classList.add("hidden");
     els.resultCard.classList.remove("hidden");
-    els.score.textContent = String(score);
+    els.score.textContent = String(calcScore());
     els.scoreTotal.textContent = String(pool.length);
     updateModeLabel();
   }
@@ -599,6 +692,7 @@ import { fetchUserData, pushUserData } from "./firebase.js";
   }
 
   els.startBtn.addEventListener("click", startQuiz);
+  els.prevBtn.addEventListener("click", prevQuestion);
   els.nextBtn.addEventListener("click", nextQuestion);
   els.restartBtn.addEventListener("click", restart);
   els.submitBtn.addEventListener("click", submitSA);
