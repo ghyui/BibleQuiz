@@ -675,7 +675,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       els.submitBtn.disabled = true;
       els.hintBtn.disabled = true;
       markWrong(`오답 (정답: ${q.answer})`);
-      recordAnswer(q, false);
+      const userAnswerStr = userValues.map((v) => v.trim()).join(" / ");
+      recordAnswer(q, false, userAnswerStr);
       updateModeLabel();
     }
   }
