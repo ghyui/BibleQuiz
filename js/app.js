@@ -529,6 +529,22 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
           });
         }
       }
+      // If question was finalized, restore reveal chips for wrong blanks
+      if (s.answered) {
+        const q = pool[idx];
+        const expected = splitExpected(q.answer);
+        if (expected.length === inputs.length) {
+          inputs.forEach((inp, i) => {
+            if (!inp.classList.contains("wrong")) return;
+            const wrap = inp.parentElement;
+            if (!wrap || wrap.querySelector(".blank-reveal")) return;
+            const reveal = document.createElement("span");
+            reveal.className = "blank-reveal";
+            reveal.textContent = expected[i] || "";
+            wrap.appendChild(reveal);
+          });
+        }
+      }
     } else if (s.type === "mc" && s.mcOptions) {
       const items = Array.from(els.qOptions.children);
       s.mcOptions.forEach((saved, i) => {
@@ -751,8 +767,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       blankResults.forEach((r) => {
         r.input.classList.remove("correct", "wrong");
         r.input.classList.add(r.ok ? "correct" : "wrong");
-        if (!r.ok) r.input.title = `정답: ${r.expected}`;
       });
+      revealWrongBlanks(blankResults);
       showCharDiffs(blankResults);
       const partialMsg = correctCount === total
         ? "완벽! 모두 정답!"
@@ -797,11 +813,25 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       els.submitBtn.disabled = true;
       els.hintBtn.disabled = true;
       markWrong(`오답 (정답: ${q.answer})`);
+      revealWrongBlanks(blankResults);
       const userAnswerStr = userValues.map((v) => v.trim()).join(" / ");
       setUserAnswerStr(userAnswerStr);
       recordAnswer(q, false, userAnswerStr);
       updateModeLabel();
     }
+  }
+
+  function revealWrongBlanks(blankResults) {
+    blankResults.forEach((r) => {
+      if (r.ok) return;
+      const wrap = r.input.parentElement;
+      if (!wrap || wrap.querySelector(".blank-reveal")) return;
+      const reveal = document.createElement("span");
+      reveal.className = "blank-reveal";
+      reveal.textContent = r.expected || "";
+      wrap.appendChild(reveal);
+      r.input.title = `정답: ${r.expected || ""}`;
+    });
   }
 
   function showCharDiffs(blankResults) {
