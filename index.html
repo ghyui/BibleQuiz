@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
   <title>성경퀴즈 예상 문제</title>
-  <link rel="stylesheet" href="css/style.css?v=20260626k" />
+  <link rel="stylesheet" href="css/style.css?v=20260626l" />
 </head>
 <body>
   <header class="site-header">
@@ -53,31 +53,23 @@
     <section id="quiz" class="tab-panel active">
       <div id="quiz-start" class="card">
         <h2>퀴즈 시작</h2>
-        <p>문제 수와 유형을 선택하세요.</p>
-        <div class="controls">
-          <label>문제 수
-            <select id="quiz-count">
-              <option value="5">5문제</option>
-              <option value="10" selected>10문제</option>
-              <option value="20">20문제</option>
-              <option value="0">전체</option>
-            </select>
-          </label>
-          <label>유형
-            <select id="quiz-type">
-              <option value="all" selected>전체</option>
-              <option value="mc">객관식만</option>
-              <option value="sa">주관식만</option>
-            </select>
-          </label>
-          <label>모드
-            <select id="quiz-mode">
-              <option value="all" selected>전체 문제</option>
-              <option value="wrong">오답노트만 (0)</option>
-              <option value="practice">연습 모드 (모두 맞출 때까지)</option>
-            </select>
-          </label>
-          <button id="start-btn" class="primary">시작</button>
+        <div class="mode-buttons">
+          <button class="mode-btn" data-preset="quick10" type="button">
+            <span class="mode-title">빠른 풀이</span>
+            <span class="mode-sub">랜덤 10문제</span>
+          </button>
+          <button class="mode-btn" data-preset="all" type="button">
+            <span class="mode-title">전체 풀기</span>
+            <span class="mode-sub">모든 문제 한 번씩</span>
+          </button>
+          <button class="mode-btn" data-preset="wrong" type="button">
+            <span class="mode-title">오답노트만 <span id="wrong-count-label">(0)</span></span>
+            <span class="mode-sub">틀린 문제만 다시 풀기</span>
+          </button>
+          <button class="mode-btn mode-btn-accent" data-preset="practice" type="button">
+            <span class="mode-title">연습 모드</span>
+            <span class="mode-sub">모두 정답일 때까지 반복</span>
+          </button>
         </div>
       </div>
 
@@ -157,7 +149,7 @@
     <small>© 2026 성경퀴즈 예상 문제</small>
   </footer>
 
-  <script src="js/questions.js?v=20260626k"></script>
-  <script type="module" src="js/app.js?v=20260626k"></script>
+  <script src="js/questions.js?v=20260626l"></script>
+  <script type="module" src="js/app.js?v=20260626l"></script>
 </body>
 </html>

@@ -169,6 +169,37 @@ main {
   font-size: 1rem;
 }
 
+.mode-buttons {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+@media (min-width: 560px) {
+  .mode-buttons { grid-template-columns: 1fr 1fr; }
+}
+.mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 1.1rem 1.2rem;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary);
+  color: white;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.05s;
+}
+.mode-btn:hover { background: var(--primary-hover); }
+.mode-btn:active { transform: translateY(1px); }
+.mode-btn-accent { background: var(--accent); }
+.mode-btn-accent:hover { background: #d75a3b; }
+.mode-btn .mode-title { font-size: 1.05rem; font-weight: 700; }
+.mode-btn .mode-sub { font-size: 0.82rem; opacity: 0.88; }
+
 button.primary {
   background: var(--primary);
   color: white;

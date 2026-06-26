@@ -303,8 +303,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     updateModeLabel();
   }
   function updateModeLabel() {
-    const opt = els.quizMode.querySelector('option[value="wrong"]');
-    if (opt) opt.textContent = `오답노트만 (${getWrongCount()})`;
+    const label = $("#wrong-count-label");
+    if (label) label.textContent = `(${getWrongCount()})`;
   }
   els.userNameSubmit.addEventListener("click", submitUserName);
   els.userNameInput.addEventListener("keydown", (e) => {
@@ -386,10 +386,17 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     return (window.QUESTIONS || []).map((q) => ({ type: q.type || "mc", ...q }));
   }
 
-  function startQuiz() {
-    const count = parseInt(els.quizCount.value, 10);
-    const typeFilter = els.quizType.value;
-    const mode = els.quizMode.value;
+  const PRESETS = {
+    quick10:  { count: 10, mode: "all",      type: "all" },
+    all:      { count: 0,  mode: "all",      type: "all" },
+    wrong:    { count: 0,  mode: "wrong",    type: "all" },
+    practice: { count: 0,  mode: "practice", type: "all" },
+  };
+  function startQuiz(presetName) {
+    const preset = PRESETS[presetName] || PRESETS.quick10;
+    const count = preset.count;
+    const typeFilter = preset.type;
+    const mode = preset.mode;
     let all = getAllQuestions();
     if (mode === "wrong") {
       const wrongIds = getWrongIds();
@@ -856,7 +863,9 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     els.startCard.classList.remove("hidden");
   }
 
-  els.startBtn.addEventListener("click", startQuiz);
+  $$(".mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => startQuiz(btn.dataset.preset));
+  });
   els.prevBtn.addEventListener("click", prevQuestion);
   els.nextBtn.addEventListener("click", nextQuestion);
   els.restartBtn.addEventListener("click", restart);
