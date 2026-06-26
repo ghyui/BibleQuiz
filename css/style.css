@@ -277,10 +277,25 @@ button.secondary {
 button.secondary:hover { background: #eef2f8; }
 button.secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 .hint {
-  color: var(--muted);
   font-size: 0.95rem;
-  font-family: "Segoe UI Mono", Consolas, monospace;
+  line-height: 2;
+}
+.hint-head {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-right: 0.25rem;
+}
+.hint-tag {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.15rem 0.6rem;
+  border-radius: 4px;
+  font-family: "Segoe UI Mono", Consolas, "Noto Sans KR", monospace;
+  font-size: 1rem;
+  margin-right: 0.4rem;
   letter-spacing: 0.05em;
+  font-weight: 600;
 }
 
 .quiz-footer {

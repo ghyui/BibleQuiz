@@ -553,13 +553,30 @@ import { fetchUserData, pushUserData } from "./firebase.js";
     hintLevel++;
     const labels = { 1: "글자수", 2: "초성", 3: "첫 글자" };
     els.hintLabel.textContent = `(${hintLevel}/3 · ${labels[hintLevel]})`;
+
     const inputs = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
     const expected = splitExpected(q.answer);
+
+    els.qHint.innerHTML = "";
+    const head = document.createElement("span");
+    head.className = "hint-head";
+    head.textContent = `힌트(${labels[hintLevel]}): `;
+    els.qHint.appendChild(head);
+
     if (expected.length === inputs.length) {
-      inputs.forEach((inp, i) => { inp.placeholder = hintFor(expected[i], hintLevel); });
-      els.qHint.textContent = "";
+      expected.forEach((part, i) => {
+        const tag = document.createElement("span");
+        tag.className = "hint-tag";
+        tag.textContent = inputs.length > 1
+          ? `${i + 1}) ${hintFor(part, hintLevel)}`
+          : hintFor(part, hintLevel);
+        els.qHint.appendChild(tag);
+      });
     } else {
-      els.qHint.textContent = `힌트(${labels[hintLevel]}): ${hintFor(q.answer, hintLevel)}`;
+      const tag = document.createElement("span");
+      tag.className = "hint-tag";
+      tag.textContent = hintFor(q.answer, hintLevel);
+      els.qHint.appendChild(tag);
     }
     if (hintLevel === 3) els.hintBtn.disabled = true;
   }
