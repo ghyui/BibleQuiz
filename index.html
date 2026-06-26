@@ -17,8 +17,22 @@
     <nav class="tabs">
       <button class="tab-btn active" data-tab="quiz">퀴즈 풀기</button>
       <button class="tab-btn" data-tab="browse">문제집 보기</button>
+      <button class="tab-btn admin-only hidden" data-tab="admin">관리자</button>
     </nav>
   </header>
+
+  <div id="admin-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>관리자 인증</h2>
+      <p class="muted-text">비밀번호를 입력하세요.</p>
+      <input id="admin-pw-input" type="password" autocomplete="current-password" />
+      <div id="admin-pw-error" class="error hidden">비밀번호가 맞지 않습니다.</div>
+      <div class="modal-actions modal-actions-spread">
+        <button id="admin-pw-cancel" type="button" class="secondary">취소</button>
+        <button id="admin-pw-submit" type="button" class="primary">확인</button>
+      </div>
+    </div>
+  </div>
 
   <div id="user-modal" class="modal hidden">
     <div class="modal-card">
@@ -113,6 +127,17 @@
           </select>
         </div>
         <ol id="question-list" class="question-list"></ol>
+      </div>
+    </section>
+
+    <section id="admin" class="tab-panel">
+      <div class="card">
+        <h2>관리자</h2>
+        <div class="admin-toolbar">
+          <button id="admin-refresh-btn" class="primary" type="button">새로고침</button>
+          <span id="admin-summary" class="muted-text"></span>
+        </div>
+        <div id="admin-users" class="admin-users"></div>
       </div>
     </section>
   </main>

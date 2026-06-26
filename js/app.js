@@ -1,4 +1,4 @@
-import { fetchUserData, pushUserData } from "./firebase.js";
+import { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } from "./firebase.js";
 
 (() => {
   const $ = (sel) => document.querySelector(sel);
@@ -41,6 +41,7 @@ import { fetchUserData, pushUserData } from "./firebase.js";
   function getCurrentUser() { return localStorage.getItem(LS_USER) || ""; }
   function setCurrentUser(name) {
     localStorage.setItem(LS_USER, name);
+    if (name !== ADMIN_NAME) setAdminUnlocked(false);
     const users = getKnownUsers();
     if (!users.includes(name)) {
       users.push(name);
@@ -94,6 +95,10 @@ import { fetchUserData, pushUserData } from "./firebase.js";
     if (currentData.history[id].length > MAX_HISTORY) {
       currentData.history[id] = currentData.history[id].slice(-MAX_HISTORY);
     }
+    if (!currentData.attempts) currentData.attempts = {};
+    if (!currentData.attempts[id]) currentData.attempts[id] = { total: 0, correct: 0 };
+    currentData.attempts[id].total++;
+    if (correct) currentData.attempts[id].correct++;
     const wrongSet = new Set(currentData.wrong);
     if (correct) wrongSet.delete(id);
     else wrongSet.add(id);
@@ -185,8 +190,24 @@ import { fetchUserData, pushUserData } from "./firebase.js";
     hideUserModal();
     updateUserUI(true);
     await loadCurrentUserData();
+    touchUserLogin(name).catch((e) => console.error("touchUserLogin failed:", e));
     updateUserUI(false);
   }
+  const ADMIN_NAME = "전병혁";
+  const ADMIN_PW_HASH = "54dad573aa8e8a5576ab37d9d72126181b74e4f4c5d925b78a26a74567a62faa"; // SHA-256
+  const ADMIN_UNLOCK_KEY = "bq_adminUnlocked";
+  function isAdmin() { return getCurrentUser() === ADMIN_NAME; }
+  function adminUnlocked() { return sessionStorage.getItem(ADMIN_UNLOCK_KEY) === "1"; }
+  function setAdminUnlocked(v) {
+    if (v) sessionStorage.setItem(ADMIN_UNLOCK_KEY, "1");
+    else sessionStorage.removeItem(ADMIN_UNLOCK_KEY);
+  }
+  async function sha256Hex(s) {
+    const buf = new TextEncoder().encode(s);
+    const hash = await crypto.subtle.digest("SHA-256", buf);
+    return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
   function updateUserUI(loading) {
     const name = getCurrentUser();
     if (name) {
@@ -197,6 +218,10 @@ import { fetchUserData, pushUserData } from "./firebase.js";
       els.userLabel.classList.add("hidden");
       els.userChangeBtn.classList.add("hidden");
     }
+    // Toggle admin tab visibility
+    $$(".admin-only").forEach((el) => {
+      el.classList.toggle("hidden", !isAdmin());
+    });
     updateModeLabel();
   }
   function updateModeLabel() {
@@ -209,15 +234,7 @@ import { fetchUserData, pushUserData } from "./firebase.js";
   });
   els.userChangeBtn.addEventListener("click", () => showUserModal());
 
-  // ---------- Tabs ----------
-  $$(".tab-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      $$(".tab-btn").forEach((b) => b.classList.remove("active"));
-      $$(".tab-panel").forEach((p) => p.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById(btn.dataset.tab).classList.add("active");
-    });
-  });
+  // ---------- Tabs (overridden later by admin-gated handler) ----------
 
   // ---------- Quiz state ----------
   let pool = [];
@@ -753,6 +770,186 @@ import { fetchUserData, pushUserData } from "./firebase.js";
   browseType.addEventListener("change", renderList);
   renderList();
 
+  // ---------- Admin ----------
+  const adminEls = {
+    refreshBtn: $("#admin-refresh-btn"),
+    summary: $("#admin-summary"),
+    users: $("#admin-users"),
+  };
+
+  function fmtDate(ts) {
+    if (!ts) return "—";
+    try {
+      return new Date(ts).toLocaleString("ko-KR", {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit",
+      });
+    } catch { return "—"; }
+  }
+
+  async function renderAdmin() {
+    if (!isAdmin()) return;
+    adminEls.users.innerHTML = '<div class="muted-text">불러오는 중…</div>';
+    adminEls.summary.textContent = "";
+    try {
+      const users = await fetchAllUsers();
+      drawAdminUsers(users);
+    } catch (e) {
+      console.error("fetchAllUsers failed:", e);
+      adminEls.users.innerHTML = `<div class="error">로드 실패: ${escapeHtml(e.message || String(e))}</div>`;
+    }
+  }
+
+  function drawAdminUsers(users) {
+    const qmap = new Map();
+    (window.QUESTIONS || []).forEach((q) => qmap.set(qid(q), q));
+
+    let totT = 0, totC = 0;
+    users.forEach((u) => {
+      Object.values(u.attempts || {}).forEach((a) => {
+        totT += a.total || 0;
+        totC += a.correct || 0;
+      });
+    });
+    adminEls.summary.textContent = `사용자 ${users.length}명 · 전체 시도 ${totT}회 (정답 ${totC}회)`;
+
+    users.sort((a, b) => (b.updatedAt || b.lastLoginAt || 0) - (a.updatedAt || a.lastLoginAt || 0));
+    adminEls.users.innerHTML = "";
+    users.forEach((u) => {
+      const attempts = u.attempts || {};
+      const userTot = Object.values(attempts).reduce((s, a) => s + (a.total || 0), 0);
+      const userCorrect = Object.values(attempts).reduce((s, a) => s + (a.correct || 0), 0);
+      const distinct = Object.keys(attempts).length;
+      const wrongCount = (u.wrong || []).length;
+
+      const card = document.createElement("div");
+      card.className = "admin-user-card";
+      card.innerHTML = `
+        <div class="admin-user-head">
+          <span class="admin-user-name">${escapeHtml(u.id)}</span>
+          <button class="link-btn admin-toggle" type="button">상세 ▾</button>
+        </div>
+        <div class="admin-user-stats">
+          <div><span class="stat-key">첫 접속</span> ${fmtDate(u.firstSeenAt)}</div>
+          <div><span class="stat-key">마지막 접속</span> ${fmtDate(u.lastLoginAt)}</div>
+          <div><span class="stat-key">마지막 활동</span> ${fmtDate(u.updatedAt)}</div>
+          <div><span class="stat-key">총 시도</span> ${userTot}회 · <span class="stat-key">정답</span> ${userCorrect}회 · <span class="stat-key">정답률</span> ${userTot ? Math.round((userCorrect / userTot) * 100) : 0}%</div>
+          <div><span class="stat-key">푼 문제</span> ${distinct} / ${(window.QUESTIONS || []).length}개 · <span class="stat-key">오답노트</span> ${wrongCount}개</div>
+        </div>
+        <div class="admin-user-detail hidden"></div>
+      `;
+      adminEls.users.appendChild(card);
+      const toggle = card.querySelector(".admin-toggle");
+      const detail = card.querySelector(".admin-user-detail");
+      toggle.addEventListener("click", () => {
+        if (detail.classList.contains("hidden")) {
+          detail.innerHTML = renderUserDetail(u, qmap);
+          detail.classList.remove("hidden");
+          toggle.textContent = "상세 ▴";
+        } else {
+          detail.classList.add("hidden");
+          toggle.textContent = "상세 ▾";
+        }
+      });
+    });
+
+    if (users.length === 0) {
+      adminEls.users.innerHTML = '<div class="muted-text">사용자가 없습니다.</div>';
+    }
+  }
+
+  function renderUserDetail(u, qmap) {
+    const attempts = u.attempts || {};
+    const history = u.history || {};
+    const wrongSet = new Set(u.wrong || []);
+    const rows = (window.QUESTIONS || []).map((q) => {
+      const id = qid(q);
+      const a = attempts[id] || { total: 0, correct: 0 };
+      const h = history[id] || [];
+      const inWrong = wrongSet.has(id);
+      if (a.total === 0 && !inWrong) return "";
+      const pips = h.map((r) => `<span class="pip pip-${r === "O" ? "o" : "x"}">${r}</span>`).join("");
+      const typeLabel = q.type === "sa" ? "주관식" : "객관식";
+      const qPreview = q.q.length > 70 ? q.q.slice(0, 70) + "…" : q.q;
+      return `
+        <div class="admin-q-row">
+          <div class="admin-q-head">
+            <span class="type-badge ${q.type}">${typeLabel}</span>
+            <span class="admin-q-text">${escapeHtml(qPreview)}</span>
+            ${inWrong ? '<span class="badge-wrong">오답노트</span>' : ""}
+          </div>
+          <div class="admin-q-stats">
+            시도 <b>${a.total}</b> · 정답 <b>${a.correct}</b> · 최근 ${pips || '<span class="muted-text">—</span>'}
+          </div>
+        </div>
+      `;
+    }).filter(Boolean).join("");
+    return rows || '<div class="muted-text">아직 푼 문제가 없어요.</div>';
+  }
+
+  adminEls.refreshBtn.addEventListener("click", renderAdmin);
+
+  // ---------- Admin password modal ----------
+  const adminModal = $("#admin-modal");
+  const adminPwInput = $("#admin-pw-input");
+  const adminPwError = $("#admin-pw-error");
+  const adminPwSubmit = $("#admin-pw-submit");
+  const adminPwCancel = $("#admin-pw-cancel");
+  let pendingAdminBtn = null;
+
+  function showAdminModal(triggerBtn) {
+    pendingAdminBtn = triggerBtn;
+    adminPwError.classList.add("hidden");
+    adminPwInput.value = "";
+    adminModal.classList.remove("hidden");
+    setTimeout(() => adminPwInput.focus(), 0);
+  }
+  function hideAdminModal() {
+    adminModal.classList.add("hidden");
+    pendingAdminBtn = null;
+  }
+  async function submitAdminPw() {
+    const entered = adminPwInput.value;
+    if (!entered) { adminPwInput.focus(); return; }
+    const h = await sha256Hex(entered);
+    if (h === ADMIN_PW_HASH) {
+      setAdminUnlocked(true);
+      hideAdminModal();
+      if (pendingAdminBtn) activateTab(pendingAdminBtn);
+    } else {
+      adminPwError.classList.remove("hidden");
+      adminPwInput.value = "";
+      adminPwInput.focus();
+    }
+  }
+  adminPwSubmit.addEventListener("click", submitAdminPw);
+  adminPwCancel.addEventListener("click", hideAdminModal);
+  adminPwInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); submitAdminPw(); }
+    if (e.key === "Escape") { e.preventDefault(); hideAdminModal(); }
+  });
+
+  // Tab activation with admin gate
+  function activateTab(btn) {
+    $$(".tab-btn").forEach((b) => b.classList.remove("active"));
+    $$(".tab-panel").forEach((p) => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "admin" && isAdmin() && adminUnlocked()) {
+      renderAdmin();
+    }
+  }
+  $$(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      if (btn.dataset.tab === "admin" && isAdmin() && !adminUnlocked()) {
+        e.preventDefault();
+        showAdminModal(btn);
+        return;
+      }
+      activateTab(btn);
+    }, true);
+  });
+
   // ---------- Init ----------
   (async () => {
     if (!getCurrentUser()) {
@@ -760,6 +957,7 @@ import { fetchUserData, pushUserData } from "./firebase.js";
     } else {
       updateUserUI(true);
       await loadCurrentUserData();
+      touchUserLogin(getCurrentUser()).catch((e) => console.error("touchUserLogin failed:", e));
       updateUserUI(false);
     }
   })();
