@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>성경 퀴즈 (소년부)</title>
+  <title>성경퀴즈 예상 문제</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <header class="site-header">
-    <h1>성경 퀴즈</h1>
-    <p class="subtitle">소년부 예상 문제</p>
+    <h1>성경퀴즈 예상 문제</h1>
+    <p class="subtitle">소년부</p>
     <nav class="tabs">
       <button class="tab-btn active" data-tab="quiz">퀴즈 풀기</button>
       <button class="tab-btn" data-tab="browse">문제집 보기</button>
@@ -20,7 +20,7 @@
     <section id="quiz" class="tab-panel active">
       <div id="quiz-start" class="card">
         <h2>퀴즈 시작</h2>
-        <p>문제 수를 선택하세요.</p>
+        <p>문제 수와 유형을 선택하세요.</p>
         <div class="controls">
           <label>문제 수
             <select id="quiz-count">
@@ -30,16 +30,37 @@
               <option value="0">전체</option>
             </select>
           </label>
+          <label>유형
+            <select id="quiz-type">
+              <option value="all" selected>전체</option>
+              <option value="mc">객관식만</option>
+              <option value="sa">주관식만</option>
+            </select>
+          </label>
           <button id="start-btn" class="primary">시작</button>
         </div>
       </div>
 
       <div id="quiz-play" class="card hidden">
         <div class="progress">
-          <span id="q-index">1</span> / <span id="q-total">10</span>
+          <span><span id="q-index">1</span> / <span id="q-total">10</span></span>
+          <span id="q-type-badge" class="type-badge"></span>
         </div>
         <h2 id="q-text">문제</h2>
-        <ul id="q-options" class="options"></ul>
+
+        <ul id="q-options" class="options hidden"></ul>
+
+        <div id="q-sa" class="sa hidden">
+          <div class="sa-row">
+            <input id="q-answer-input" type="text" placeholder="정답을 입력하세요" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+            <button id="submit-btn" class="primary">제출</button>
+          </div>
+          <div class="hint-row">
+            <button id="hint-btn" class="secondary" type="button">힌트 보기 <span id="hint-level">(0/3)</span></button>
+            <span id="q-hint" class="hint"></span>
+          </div>
+        </div>
+
         <div class="quiz-footer">
           <span id="q-feedback" class="feedback"></span>
           <button id="next-btn" class="primary" disabled>다음</button>
@@ -56,14 +77,21 @@
     <section id="browse" class="tab-panel">
       <div class="card">
         <h2>문제집</h2>
-        <input id="search" type="search" placeholder="문제 또는 정답 검색..." />
+        <div class="browse-controls">
+          <input id="search" type="search" placeholder="문제 또는 정답 검색..." />
+          <select id="browse-type">
+            <option value="all" selected>전체</option>
+            <option value="mc">객관식만</option>
+            <option value="sa">주관식만</option>
+          </select>
+        </div>
         <ol id="question-list" class="question-list"></ol>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <small>© 2026 성경 퀴즈</small>
+    <small>© 2026 성경퀴즈 예상 문제</small>
   </footer>
 
   <script src="js/questions.js"></script>

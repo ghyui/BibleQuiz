@@ -14,3 +14,8 @@ npm-debug.log*
 
 # Claude
 .claude/
+
+# Local secrets (do NOT commit)
+token.txt
+*.token
+
