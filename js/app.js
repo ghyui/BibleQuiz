@@ -461,7 +461,12 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
 
   function captureCurrentState() {
     const q = pool[idx];
+    const prev = stateByIdx.get(idx) || {};
     const s = {
+      // Preserve result-related fields written by setResult / setUserAnswerStr / submitSA
+      ...(prev.correct !== undefined ? { correct: prev.correct } : {}),
+      ...(prev.partialScore ? { partialScore: prev.partialScore } : {}),
+      ...(prev.userAnswerStr != null ? { userAnswerStr: prev.userAnswerStr } : {}),
       type: q.type,
       answered,
       attempts,
@@ -487,8 +492,6 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       const items = Array.from(els.qOptions.children);
       s.mcOptions = items.map((li) => ({ classList: li.className }));
     }
-    const prev = stateByIdx.get(idx);
-    if (prev && prev.correct !== undefined) s.correct = prev.correct;
     stateByIdx.set(idx, s);
   }
 
