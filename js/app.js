@@ -701,6 +701,25 @@ import { fetchUserData, pushUserData } from "./firebase.js";
   // ---------- Browse ----------
   const browseType = $("#browse-type");
   const search = $("#search");
+  function saQuestionHtml(q) {
+    const expected = splitExpected(q.answer);
+    const text = q.q;
+    const matches = [...text.matchAll(BLANK_RE)];
+    if (matches.length === 0) {
+      return `${escapeHtml(text)} <span class="answer-box">${escapeHtml(q.answer)}</span>`;
+    }
+    let html = "";
+    let last = 0;
+    matches.forEach((m, i) => {
+      html += escapeHtml(text.slice(last, m.index));
+      const part = expected.length === matches.length ? expected[i] : "";
+      html += `<span class="answer-box">${escapeHtml(part)}</span>`;
+      last = m.index + m[0].length;
+    });
+    html += escapeHtml(text.slice(last));
+    return html;
+  }
+
   function renderList() {
     const ol = $("#question-list");
     ol.innerHTML = "";
@@ -713,15 +732,19 @@ import { fetchUserData, pushUserData } from "./firebase.js";
       if (f && !text.includes(f)) return;
       const li = document.createElement("li");
       const typeLabel = q.type === "sa" ? "주관식" : "객관식";
+      const qHtml = q.type === "sa" ? saQuestionHtml(q) : escapeHtml(q.q);
       const optionsHtml = q.type === "mc" && Array.isArray(q.options)
         ? `<ul class="mini-options">${q.options.map((o, oi) => `<li${oi === q.answer ? ' class="is-answer"' : ""}>${escapeHtml(o)}</li>`).join("")}</ul>`
         : "";
+      const answerRow = q.type === "mc"
+        ? `<div class="answer-row"><span class="answer">정답: ${escapeHtml(ans)}</span>${q.ref ? `<span class="ref">${escapeHtml(q.ref)}</span>` : ""}</div>`
+        : (q.ref ? `<div class="answer-row"><span class="ref">${escapeHtml(q.ref)}</span></div>` : "");
       li.innerHTML = `
         <div class="q-row">
-          <span class="type-badge ${q.type}">${typeLabel}</span><span class="q-body">${escapeHtml(q.q)}</span>
+          <span class="type-badge ${q.type}">${typeLabel}</span><span class="q-body">${qHtml}</span>
         </div>
         ${optionsHtml}
-        <div class="answer-row"><span class="answer">정답: ${escapeHtml(ans)}</span>${q.ref ? `<span class="ref">${escapeHtml(q.ref)}</span>` : ""}</div>
+        ${answerRow}
       `;
       ol.appendChild(li);
     });

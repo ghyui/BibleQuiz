@@ -374,6 +374,18 @@ button.secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 .question-list .answer { color: var(--accent); font-weight: 600; }
 .question-list .ref { color: var(--muted); font-size: 0.85rem; margin-left: 0.75rem; }
 
+.answer-box {
+  display: inline-block;
+  background: #fff8e6;
+  border: 1.5px solid var(--accent);
+  border-radius: 4px;
+  padding: 0.1rem 0.55rem;
+  margin: 0 0.2rem;
+  color: var(--accent);
+  font-weight: 600;
+  vertical-align: baseline;
+}
+
 .site-footer {
   text-align: center;
   padding: 1.5rem;
