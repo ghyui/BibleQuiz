@@ -297,6 +297,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     return Array.from(String(s)).filter((c) => !/\s/.test(c)).length;
   }
   function makeBlankInput(idx, expectedPart) {
+    const wrap = document.createElement("span");
+    wrap.className = "blank-wrap";
     const input = document.createElement("input");
     input.type = "text";
     input.className = "blank-input";
@@ -310,7 +312,12 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     } else {
       input.style.width = "6em";
     }
-    return input;
+    wrap.appendChild(input);
+    const badge = document.createElement("span");
+    badge.className = "blank-hint hidden";
+    badge.dataset.idx = String(idx);
+    wrap.appendChild(badge);
+    return wrap;
   }
   function renderSAWithBlanks(qText, qAnswer, container) {
     container.innerHTML = "";
@@ -428,6 +435,21 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
         inp.className = saved.classList || "blank-input";
         inp.title = saved.title || "";
       });
+      // If hint level 3 was reached, restore per-blank first-char chips
+      if ((s.hintLevel || 0) >= 3) {
+        const q = pool[idx];
+        const expected = splitExpected(q.answer);
+        if (expected.length === inputs.length) {
+          inputs.forEach((inp, i) => {
+            const badge = inp.parentElement?.querySelector(".blank-hint");
+            if (!badge) return;
+            const firstChar = Array.from(expected[i] || "")[0] || "";
+            if (!firstChar) return;
+            badge.textContent = firstChar;
+            badge.classList.remove("hidden");
+          });
+        }
+      }
     } else if (s.type === "mc" && s.mcOptions) {
       const items = Array.from(els.qOptions.children);
       s.mcOptions.forEach((saved, i) => {
@@ -729,15 +751,15 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
           : hintFor(part, hintLevel);
         els.qHint.appendChild(tag);
       });
-      // Level 3: drop the first char into each empty blank box
+      // Level 3: show first char as a chip beside each blank (NOT inside input)
       if (hintLevel === 3) {
         inputs.forEach((inp, i) => {
-          if (inp.disabled) return;
-          if (inp.value && inp.value.trim() !== "") return;
+          const badge = inp.parentElement?.querySelector(".blank-hint");
+          if (!badge) return;
           const firstChar = Array.from(expected[i] || "")[0] || "";
           if (!firstChar) return;
-          inp.value = firstChar;
-          try { inp.setSelectionRange(firstChar.length, firstChar.length); } catch {}
+          badge.textContent = firstChar;
+          badge.classList.remove("hidden");
         });
       }
     } else {
