@@ -324,10 +324,6 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       input.style.width = "6em";
     }
     wrap.appendChild(input);
-    const badge = document.createElement("span");
-    badge.className = "blank-hint hidden";
-    badge.dataset.idx = String(idx);
-    wrap.appendChild(badge);
     return wrap;
   }
   function renderSAWithBlanks(qText, qAnswer, container) {
@@ -446,21 +442,6 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
         inp.className = saved.classList || "blank-input";
         inp.title = saved.title || "";
       });
-      // If hint level 3 was reached, restore per-blank first-char chips
-      if ((s.hintLevel || 0) >= 3) {
-        const q = pool[idx];
-        const expected = splitExpected(q.answer);
-        if (expected.length === inputs.length) {
-          inputs.forEach((inp, i) => {
-            const badge = inp.parentElement?.querySelector(".blank-hint");
-            if (!badge) return;
-            const firstChar = Array.from(expected[i] || "")[0] || "";
-            if (!firstChar) return;
-            badge.textContent = firstChar;
-            badge.classList.remove("hidden");
-          });
-        }
-      }
     } else if (s.type === "mc" && s.mcOptions) {
       const items = Array.from(els.qOptions.children);
       s.mcOptions.forEach((saved, i) => {
@@ -531,7 +512,17 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       els.hintBtn.disabled = false;
       els.qSaQuestion.querySelectorAll(".blank-input").forEach((inp) => {
         inp.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") { e.preventDefault(); submitSA(); }
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          if (answered) { submitSA(); return; }
+          const editable = Array.from(els.qSaQuestion.querySelectorAll(".blank-input:not([disabled])"));
+          const empty = editable.find((i2) => i2.value.trim() === "");
+          if (empty) {
+            empty.focus();
+            try { empty.setSelectionRange(empty.value.length, empty.value.length); } catch {}
+          } else {
+            submitSA();
+          }
         });
       });
     } else {
@@ -764,16 +755,6 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
           : hintFor(part, hintLevel);
         row.appendChild(tag);
       });
-      if (hintLevel === 3) {
-        inputs.forEach((inp, i) => {
-          const badge = inp.parentElement?.querySelector(".blank-hint");
-          if (!badge) return;
-          const firstChar = Array.from(expected[i] || "")[0] || "";
-          if (!firstChar) return;
-          badge.textContent = firstChar;
-          badge.classList.remove("hidden");
-        });
-      }
     } else {
       const tag = document.createElement("span");
       tag.className = "hint-tag";
