@@ -1,4 +1,7 @@
-import { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } from "./firebase.js";
+// Propagate cache-bust version (from app.js?v=...) to firebase.js import
+const __bqVer = new URL(import.meta.url).searchParams.get("v") || "";
+const __fbUrl = "./firebase.js" + (__bqVer ? "?v=" + __bqVer : "");
+const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await import(__fbUrl);
 
 (() => {
   const $ = (sel) => document.querySelector(sel);
