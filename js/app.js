@@ -88,6 +88,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     try {
       currentData = await fetchUserData(name);
       if (!currentData.attempts) currentData.attempts = {};
+      if (!currentData.hints) currentData.hints = {};
       // One-time backfill: history exists but attempts missing for that qid
       let backfilled = false;
       for (const [id, hist] of Object.entries(currentData.history || {})) {
@@ -698,6 +699,15 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     if (q.type !== "sa") return;
     if (hintLevel >= 3) return;
     hintLevel++;
+    // Record hint usage per question (max level reached, total clicks)
+    const id = qid(q);
+    if (!currentData.hints) currentData.hints = {};
+    if (!currentData.hints[id]) currentData.hints[id] = { maxLevel: 0, clicks: 0 };
+    currentData.hints[id].clicks++;
+    if (hintLevel > currentData.hints[id].maxLevel) {
+      currentData.hints[id].maxLevel = hintLevel;
+    }
+    persistCurrentUserData();
     const labels = { 1: "글자수", 2: "초성", 3: "첫 글자" };
     els.hintLabel.textContent = `(${hintLevel}/3 · ${labels[hintLevel]})`;
 
@@ -865,6 +875,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       const userCorrect = Object.values(attempts).reduce((s, a) => s + (a.correct || 0), 0);
       const distinct = Object.keys(attempts).length;
       const wrongCount = (u.wrong || []).length;
+      const hintClicks = Object.values(u.hints || {}).reduce((s, h) => s + (h.clicks || 0), 0);
+      const hintQuestions = Object.values(u.hints || {}).filter((h) => (h.clicks || 0) > 0).length;
 
       const card = document.createElement("div");
       card.className = "admin-user-card";
@@ -878,7 +890,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
           <div><span class="stat-key">마지막 접속</span> ${fmtDate(u.lastLoginAt)}</div>
           <div><span class="stat-key">마지막 활동</span> ${fmtDate(u.updatedAt)}</div>
           <div><span class="stat-key">총 시도</span> ${userTot}회 · <span class="stat-key">정답</span> ${userCorrect}회 · <span class="stat-key">정답률</span> ${userTot ? Math.round((userCorrect / userTot) * 100) : 0}%</div>
-          <div><span class="stat-key">푼 문제</span> ${distinct} / ${(window.QUESTIONS || []).length}개 · <span class="stat-key">오답노트</span> ${wrongCount}개</div>
+          <div><span class="stat-key">푼 문제</span> ${distinct} / ${(window.QUESTIONS || []).length}개 · <span class="stat-key">오답노트</span> ${wrongCount}개 · <span class="stat-key">힌트</span> ${hintClicks}회 (${hintQuestions}개 문제)</div>
         </div>
         <div class="admin-user-detail hidden"></div>
       `;
@@ -905,16 +917,22 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   function renderUserDetail(u, qmap) {
     const attempts = effectiveAttempts(u.history, u.attempts);
     const history = u.history || {};
+    const hints = u.hints || {};
     const wrongSet = new Set(u.wrong || []);
+    const hintLabels = { 0: "—", 1: "글자수", 2: "초성", 3: "첫 글자" };
     const rows = (window.QUESTIONS || []).map((q) => {
       const id = qid(q);
       const a = attempts[id] || { total: 0, correct: 0 };
       const h = history[id] || [];
       const inWrong = wrongSet.has(id);
-      if (a.total === 0 && !inWrong) return "";
+      const hi = hints[id];
+      if (a.total === 0 && !inWrong && !hi) return "";
       const pips = h.map((r) => `<span class="pip pip-${r === "O" ? "o" : "x"}">${r}</span>`).join("");
       const typeLabel = q.type === "sa" ? "주관식" : "객관식";
       const qPreview = q.q.length > 70 ? q.q.slice(0, 70) + "…" : q.q;
+      const hintInfo = hi && hi.maxLevel > 0
+        ? `<span class="hint-info">힌트 ${hi.maxLevel}단계(${hintLabels[hi.maxLevel]}) · ${hi.clicks}회</span>`
+        : "";
       return `
         <div class="admin-q-row">
           <div class="admin-q-head">
@@ -924,6 +942,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
           </div>
           <div class="admin-q-stats">
             시도 <b>${a.total}</b> · 정답 <b>${a.correct}</b> · 최근 ${pips || '<span class="muted-text">—</span>'}
+            ${hintInfo}
           </div>
         </div>
       `;

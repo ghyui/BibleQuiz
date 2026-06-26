@@ -440,6 +440,16 @@ button.secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 .admin-q-stats { font-size: 0.85rem; color: var(--muted); }
 .admin-q-stats b { color: var(--text); }
+.hint-info {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
 .badge-wrong {
   display: inline-block;
   background: #fee2e2;
