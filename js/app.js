@@ -729,6 +729,17 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
           : hintFor(part, hintLevel);
         els.qHint.appendChild(tag);
       });
+      // Level 3: drop the first char into each empty blank box
+      if (hintLevel === 3) {
+        inputs.forEach((inp, i) => {
+          if (inp.disabled) return;
+          if (inp.value && inp.value.trim() !== "") return;
+          const firstChar = Array.from(expected[i] || "")[0] || "";
+          if (!firstChar) return;
+          inp.value = firstChar;
+          try { inp.setSelectionRange(firstChar.length, firstChar.length); } catch {}
+        });
+      }
     } else {
       const tag = document.createElement("span");
       tag.className = "hint-tag";
