@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
   <title>성경퀴즈 예상 문제</title>
-  <link rel="stylesheet" href="css/style.css?v=20261113d" />
+  <link rel="stylesheet" href="css/style.css?v=20261113e" />
 </head>
 <body>
   <header class="site-header">
@@ -52,28 +52,6 @@
   <main>
     <section id="quiz" class="tab-panel active">
       <div id="quiz-start">
-        <div class="card">
-          <h2>퀴즈 시작</h2>
-          <div class="mode-buttons">
-            <button class="mode-btn" data-preset="practice" type="button">
-              <span class="mode-title">연습 시작</span>
-              <span class="mode-sub">모두 맞출 때까지 · 힌트 사용 가능</span>
-            </button>
-            <button class="mode-btn mode-btn-accent" data-preset="exam" type="button">
-              <span class="mode-title">실전 연습</span>
-              <span class="mode-sub">랜덤 10문제 · 힌트 없음 · 끝나면 리포트</span>
-            </button>
-            <button class="mode-btn" data-preset="lordsprayer" type="button">
-              <span class="mode-title">주기도문 외우기</span>
-              <span class="mode-sub">개역개정 · 매번 다른 10개 빈칸</span>
-            </button>
-            <button class="mode-btn mode-btn-mini" data-preset="wrong" type="button">
-              <span class="mode-title">오답노트만 <span id="wrong-count-label">(0)</span></span>
-              <span class="mode-sub">틀린 문제만 다시 풀기</span>
-            </button>
-          </div>
-        </div>
-
         <div id="verse-card" class="card hidden">
           <h2><span id="verse-title">시편 23편</span> 외우기</h2>
           <p class="muted-text verse-intro">빈칸 채우기로 익히고, 마지막에는 모든 구절을 직접 써 보세요. <span id="verse-version"></span></p>
@@ -106,6 +84,28 @@
             <button class="mode-btn mode-btn-final" data-verse-mode="full" type="button">
               <span class="mode-title">전체 쓰기 (최종)</span>
               <span class="mode-sub">모든 구절을 처음부터 끝까지 써 보기</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>퀴즈 시작</h2>
+          <div class="mode-buttons">
+            <button class="mode-btn" data-preset="practice" type="button">
+              <span class="mode-title">연습 시작</span>
+              <span class="mode-sub">모두 맞출 때까지 · 힌트 사용 가능</span>
+            </button>
+            <button class="mode-btn mode-btn-accent" data-preset="exam" type="button">
+              <span class="mode-title">실전 연습</span>
+              <span class="mode-sub">랜덤 10문제 · 힌트 없음 · 끝나면 리포트</span>
+            </button>
+            <button class="mode-btn" data-preset="lordsprayer" type="button">
+              <span class="mode-title">주기도문 외우기</span>
+              <span class="mode-sub">개역개정 · 매번 다른 10개 빈칸</span>
+            </button>
+            <button class="mode-btn mode-btn-mini" data-preset="wrong" type="button">
+              <span class="mode-title">오답노트만 <span id="wrong-count-label">(0)</span></span>
+              <span class="mode-sub">틀린 문제만 다시 풀기</span>
             </button>
           </div>
         </div>
@@ -213,7 +213,7 @@
     <small>© 2026 성경퀴즈 예상 문제</small>
   </footer>
 
-  <script src="js/questions.js?v=20261113d"></script>
-  <script type="module" src="js/app.js?v=20261113d"></script>
+  <script src="js/questions.js?v=20261113e"></script>
+  <script type="module" src="js/app.js?v=20261113e"></script>
 </body>
 </html>
