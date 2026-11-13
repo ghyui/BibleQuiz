@@ -581,6 +581,141 @@ button.secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 .admin-toggle:hover { background: #eef2f8; }
 .error { color: var(--wrong); padding: 0.5rem; background: #fee2e2; border-radius: 6px; }
 
+/* ---------- 암송 구절 (시편 23편) ---------- */
+.type-badge.verse { background: #d1fae5; color: #065f46; }
+.q-label { font-weight: 700; color: var(--primary); }
+.verse-intro { margin: 0 0 0.75rem; }
+.verse-text {
+  margin: 0 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  background: #fafaf7;
+}
+.verse-text summary { cursor: pointer; font-weight: 600; color: var(--primary); }
+.verse-text ol {
+  margin: 0.5rem 0 0.25rem;
+  padding-left: 1.4rem;
+  line-height: 1.9;
+  word-break: keep-all;
+}
+
+.level-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.level-label { font-size: 0.9rem; color: var(--muted); }
+.level-seg {
+  display: inline-flex;
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.level-btn {
+  background: white;
+  color: var(--primary);
+  border: none;
+  padding: 0.35rem 0.95rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.level-btn + .level-btn { border-left: 1px solid var(--primary); }
+.level-btn:hover { background: #eef2f8; }
+.level-btn.active { background: var(--primary); color: white; font-weight: 700; }
+
+.mode-btn-final { background: #2f6f4f; }
+.mode-btn-final:hover { background: #255a40; }
+
+/* 연습: 틀린 빈칸을 바로 알려 줄 때 */
+@keyframes bq-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.blank-input.shake { animation: bq-shake 0.25s 2; }
+.hint-known { color: var(--correct); font-weight: 700; }
+.diff-legend { font-size: 0.8rem; color: var(--muted); }
+
+/* 퀴즈 도중 나가기 */
+.progress-right { display: inline-flex; align-items: center; gap: 0.5rem; }
+.quit-btn {
+  background: white;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.quit-btn:hover { background: #f3f4f6; color: var(--text); }
+
+/* 실전 리포트: 빈칸별 결과 */
+.result-note { margin: -0.5rem 0 0.75rem; }
+.result-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.verse-report-body { line-height: 2.2; word-break: keep-all; }
+.rb {
+  display: inline-block;
+  padding: 0 0.45rem;
+  margin: 0 0.12rem;
+  border-radius: 4px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.rb-ok { background: #dcfce7; color: #14532d; }
+.rb-bad { background: #fee2e2; color: #7f1d1d; text-decoration: line-through; }
+.rb-ans { background: white; color: #14532d; border: 1px solid #86efac; }
+
+/* 전체 쓰기 */
+.vf-list { display: flex; flex-direction: column; gap: 1.1rem; margin-top: 0.75rem; }
+.vf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+.vf-num { font-weight: 700; color: var(--primary); }
+button.secondary.vf-hint-btn { padding: 0.2rem 0.65rem; font-size: 0.8rem; }
+.vf-hint {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  margin-bottom: 0.3rem;
+  font-family: "Segoe UI Mono", Consolas, "Noto Sans KR", monospace;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.7;
+  word-break: keep-all;
+}
+.vf-hint.hidden { display: none; }
+.vf-input {
+  display: block;
+  width: 100%;
+  min-height: 3.6em;
+  padding: 0.55rem 0.7rem;
+  border: 1.5px solid var(--primary);
+  border-radius: 6px;
+  background: #fff8e6;
+  font-family: inherit;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text);
+  resize: vertical;
+  outline: none;
+}
+.vf-input:focus { background: #fef3c7; border-color: var(--accent); }
+.vf-input.correct { border-color: var(--correct); background: #dcfce7; color: #14532d; }
+.vf-input.wrong { border-color: var(--wrong); background: #fee2e2; color: #7f1d1d; }
+.vf-result { font-size: 0.98rem; line-height: 1.9; margin-top: 0.35rem; word-break: keep-all; }
+.vf-line-label { color: var(--muted); font-size: 0.8rem; margin-right: 0.4rem; }
+.char-miss { background: #fde68a; color: #92400e; font-weight: 700; border-radius: 2px; }
+
 .site-footer {
   text-align: center;
   padding: 1.5rem;

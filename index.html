@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
   <title>성경퀴즈 예상 문제</title>
-  <link rel="stylesheet" href="css/style.css?v=20260626s" />
+  <link rel="stylesheet" href="css/style.css?v=20261113d" />
 </head>
 <body>
   <header class="site-header">
@@ -51,34 +51,76 @@
 
   <main>
     <section id="quiz" class="tab-panel active">
-      <div id="quiz-start" class="card">
-        <h2>퀴즈 시작</h2>
-        <div class="mode-buttons">
-          <button class="mode-btn" data-preset="practice" type="button">
-            <span class="mode-title">연습 시작</span>
-            <span class="mode-sub">모두 맞출 때까지 · 힌트 사용 가능</span>
-          </button>
-          <button class="mode-btn mode-btn-accent" data-preset="exam" type="button">
-            <span class="mode-title">실전 연습</span>
-            <span class="mode-sub">랜덤 10문제 · 힌트 없음 · 끝나면 리포트</span>
-          </button>
-          <button class="mode-btn" data-preset="lordsprayer" type="button">
-            <span class="mode-title">주기도문 외우기</span>
-            <span class="mode-sub">개역개정 · 매번 다른 10개 빈칸</span>
-          </button>
-          <button class="mode-btn mode-btn-mini" data-preset="wrong" type="button">
-            <span class="mode-title">오답노트만 <span id="wrong-count-label">(0)</span></span>
-            <span class="mode-sub">틀린 문제만 다시 풀기</span>
-          </button>
+      <div id="quiz-start">
+        <div class="card">
+          <h2>퀴즈 시작</h2>
+          <div class="mode-buttons">
+            <button class="mode-btn" data-preset="practice" type="button">
+              <span class="mode-title">연습 시작</span>
+              <span class="mode-sub">모두 맞출 때까지 · 힌트 사용 가능</span>
+            </button>
+            <button class="mode-btn mode-btn-accent" data-preset="exam" type="button">
+              <span class="mode-title">실전 연습</span>
+              <span class="mode-sub">랜덤 10문제 · 힌트 없음 · 끝나면 리포트</span>
+            </button>
+            <button class="mode-btn" data-preset="lordsprayer" type="button">
+              <span class="mode-title">주기도문 외우기</span>
+              <span class="mode-sub">개역개정 · 매번 다른 10개 빈칸</span>
+            </button>
+            <button class="mode-btn mode-btn-mini" data-preset="wrong" type="button">
+              <span class="mode-title">오답노트만 <span id="wrong-count-label">(0)</span></span>
+              <span class="mode-sub">틀린 문제만 다시 풀기</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="verse-card" class="card hidden">
+          <h2><span id="verse-title">시편 23편</span> 외우기</h2>
+          <p class="muted-text verse-intro">빈칸 채우기로 익히고, 마지막에는 모든 구절을 직접 써 보세요. <span id="verse-version"></span></p>
+          <details class="verse-text">
+            <summary>말씀 먼저 읽기</summary>
+            <ol id="verse-text-list"></ol>
+          </details>
+          <div class="level-row">
+            <span class="level-label">난이도</span>
+            <div class="level-seg">
+              <button class="level-btn" data-level="easy" type="button">쉬움</button>
+              <button class="level-btn" data-level="normal" type="button">보통</button>
+              <button class="level-btn" data-level="hard" type="button">어려움</button>
+            </div>
+            <span id="level-desc" class="muted-text small"></span>
+          </div>
+          <div class="mode-buttons">
+            <button class="mode-btn" data-verse-mode="practice" type="button">
+              <span class="mode-title">암송 연습</span>
+              <span class="mode-sub">틀리면 바로 알려주고 힌트가 자동으로 나와요</span>
+            </button>
+            <button class="mode-btn mode-btn-accent" data-verse-mode="exam" type="button">
+              <span class="mode-title">암송 실전</span>
+              <span class="mode-sub"><span id="verse-exam-count">10</span>문제 · 힌트 없음 · 끝나면 한 번에 채점</span>
+            </button>
+            <button class="mode-btn mode-btn-mini" data-verse-mode="wrong" type="button">
+              <span class="mode-title">암송 오답노트 <span id="verse-wrong-count-label">(0)</span></span>
+              <span class="mode-sub">틀린 구절만 반복 · 3번 연속 맞히면 빠져요</span>
+            </button>
+            <button class="mode-btn mode-btn-final" data-verse-mode="full" type="button">
+              <span class="mode-title">전체 쓰기 (최종)</span>
+              <span class="mode-sub">모든 구절을 처음부터 끝까지 써 보기</span>
+            </button>
+          </div>
         </div>
       </div>
 
       <div id="quiz-play" class="card hidden">
         <div class="progress">
           <span><span id="q-index">1</span> / <span id="q-total">10</span></span>
-          <span id="q-type-badge" class="type-badge"></span>
+          <span class="progress-right">
+            <span id="q-type-badge" class="type-badge"></span>
+            <button id="quit-btn" class="quit-btn" type="button">나가기</button>
+          </span>
         </div>
         <div id="q-history" class="q-history"></div>
+        <div id="q-label" class="q-label hidden"></div>
         <h2 id="q-text" class="hidden">문제</h2>
         <div id="q-sa-question" class="sa-question hidden"></div>
 
@@ -106,8 +148,29 @@
       <div id="quiz-result" class="card hidden">
         <h2>결과</h2>
         <p class="score">점수: <span id="score">0</span> / <span id="score-total">0</span></p>
+        <p id="result-note" class="muted-text result-note hidden"></p>
         <div id="result-report" class="result-report hidden"></div>
-        <button id="restart-btn" class="primary">다시 풀기</button>
+        <div class="result-actions">
+          <button id="restart-btn" class="primary">다시 풀기</button>
+          <button id="result-verse-btn" class="secondary hidden" type="button"></button>
+        </div>
+      </div>
+
+      <div id="verse-full" class="card hidden">
+        <div class="progress">
+          <span id="vf-title" class="q-label"></span>
+          <span class="type-badge verse">전체 쓰기</span>
+        </div>
+        <p class="muted-text">각 절을 기억나는 대로 써 보세요. 띄어쓰기와 문장부호는 채점하지 않아요.</p>
+        <div id="vf-list" class="vf-list"></div>
+        <div class="quiz-footer">
+          <span id="vf-feedback" class="feedback"></span>
+          <div class="nav-buttons">
+            <button id="vf-quit-btn" class="secondary" type="button">그만하기</button>
+            <button id="vf-retry-btn" class="secondary hidden" type="button">틀린 절만 다시 쓰기</button>
+            <button id="vf-submit-btn" class="primary" type="button">채점하기</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -150,7 +213,7 @@
     <small>© 2026 성경퀴즈 예상 문제</small>
   </footer>
 
-  <script src="js/questions.js?v=20260626s"></script>
-  <script type="module" src="js/app.js?v=20260626s"></script>
+  <script src="js/questions.js?v=20261113d"></script>
+  <script type="module" src="js/app.js?v=20261113d"></script>
 </body>
 </html>

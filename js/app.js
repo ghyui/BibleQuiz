@@ -41,6 +41,49 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
   }
 
+  // ---------- 암송 구절 데이터 (js/questions.js 의 window.MEMORY_VERSE) ----------
+  // 기록은 일반 문제와 같은 history/attempts/wrong 맵에 "<key>_" 접두어 id로 저장한다.
+  const VERSE = window.MEMORY_VERSE || null;
+  const VERSE_PREFIX = VERSE ? VERSE.key + "_" : "\u0000";
+  function isVerseId(id) { return String(id).startsWith(VERSE_PREFIX); }
+  // 빈칸 채우기 단위: 절(또는 긴 절의 한 부분) 하나가 한 문제
+  const VERSE_UNITS = [];
+  if (VERSE) {
+    VERSE.verses.forEach((v) => {
+      v.parts.forEach((text, i) => {
+        const multi = v.parts.length > 1;
+        VERSE_UNITS.push({
+          id: VERSE_PREFIX + v.n + (multi ? "abcdefgh"[i] : ""),
+          n: v.n,
+          partIdx: i,
+          partCount: v.parts.length,
+          text,
+          label: VERSE.refPrefix + v.n + (multi ? ` (${i + 1}/${v.parts.length})` : ""),
+        });
+      });
+    });
+  }
+  const VERSE_UNIT_IDS = new Set(VERSE_UNITS.map((u) => u.id));
+  function verseFullId(n) { return VERSE_PREFIX + "v" + n; }
+  function verseFullText(v) { return v.parts.join(" "); }
+  // 히스토리/관리자 화면에 보여 줄 암송 항목 (빈칸 채우기 단위 + 절별 전체 쓰기)
+  function verseTrackables() {
+    if (!VERSE) return [];
+    const ref = `${VERSE.title} (${VERSE.version})`;
+    const units = VERSE_UNITS.map((u) => ({
+      type: "sa", id: u.id, badge: "암송", verse: true,
+      q: `${u.label} 빈칸 채우기`, answer: u.text, ref,
+    }));
+    const fulls = VERSE.verses.map((v) => ({
+      type: "sa", id: verseFullId(v.n), badge: "전체 쓰기", verse: true,
+      q: `${VERSE.refPrefix}${v.n} 전체 쓰기`, answer: verseFullText(v), ref,
+    }));
+    return [...units, ...fulls];
+  }
+  function getTrackables() {
+    return [...(window.QUESTIONS || []), ...verseTrackables()];
+  }
+
   // ---------- Storage (Firestore + localStorage cache for UX bits) ----------
   const LS_USER = "bq_currentUser";   // last-logged-in name on THIS browser
   const LS_USERS = "bq_users";        // chip list for THIS browser (UX only)
@@ -66,6 +109,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     try { return JSON.parse(localStorage.getItem(LS_USERS) || "[]"); } catch { return []; }
   }
   function qid(q) {
+    if (q.id) return q.id; // 암송 구절처럼 문제 문장이 매번 바뀌는 항목은 고정 id 사용
     let h = 5381;
     const s = q.q;
     for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
@@ -170,15 +214,17 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       }
     }
     // Wrong-notebook rules:
-    // - Add on any wrong answer
-    // - Remove ONLY when the last 5 history entries are all "O"
+    // - Add on any wrong answer (unless the item opts out with noWrongNote)
+    // - Remove ONLY when the last N history entries are all "O"
+    //   (N = 5 by default, q.wrongClearStreak overrides — 암송 구절은 3)
     const wrongSet = new Set(currentData.wrong);
+    const streak = q.wrongClearStreak || 5;
     if (correct) {
-      const last5 = currentData.history[id].slice(-5);
-      if (last5.length >= 5 && last5.every((r) => r === "O")) {
+      const lastN = currentData.history[id].slice(-streak);
+      if (lastN.length >= streak && lastN.every((r) => r === "O")) {
         wrongSet.delete(id);
       }
-    } else {
+    } else if (!q.noWrongNote) {
       wrongSet.add(id);
     }
     currentData.wrong = Array.from(wrongSet);
@@ -190,8 +236,12 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   function getHistoryFor(q) {
     return currentData.history[qid(q)] || [];
   }
+  // 일반 퀴즈 오답노트 개수 (암송 구절은 따로 센다)
   function getWrongCount() {
-    return (currentData.wrong || []).length;
+    return (currentData.wrong || []).filter((id) => !isVerseId(id)).length;
+  }
+  function getVerseWrongCount() {
+    return (currentData.wrong || []).filter((id) => VERSE_UNIT_IDS.has(id)).length;
   }
 
   // ---------- Element refs ----------
@@ -220,6 +270,9 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     qTotal: $("#q-total"),
     qTypeBadge: $("#q-type-badge"),
     qHistory: $("#q-history"),
+    qLabel: $("#q-label"),
+    resultNote: $("#result-note"),
+    resultVerseBtn: $("#result-verse-btn"),
     qText: $("#q-text"),
     qSaQuestion: $("#q-sa-question"),
     qOptions: $("#q-options"),
@@ -307,6 +360,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   function updateModeLabel() {
     const label = $("#wrong-count-label");
     if (label) label.textContent = `(${getWrongCount()})`;
+    const verseLabel = $("#verse-wrong-count-label");
+    if (verseLabel) verseLabel.textContent = `(${getVerseWrongCount()})`;
   }
   els.userNameSubmit.addEventListener("click", submitUserName);
   els.userNameInput.addEventListener("keydown", (e) => {
@@ -328,6 +383,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   let examMode = false;
   let practiceTarget = 0;   // initial question count
   let practiceTotalAttempts = 0;
+  let verseMode = null;     // null | "practice" | "exam" | "wrong" | "full" (암송 구절 모드)
 
   const BLANK_RE = /\(\s+\)/g;
   function splitExpected(answer) {
@@ -436,6 +492,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     if (typeFilter !== "all") all = all.filter((q) => q.type === typeFilter);
     all = shuffle(all);
 
+    verseMode = null;
     practiceMode = (mode === "practice");
     examMode = (mode === "exam");
     if (mode === "lordsprayer") {
@@ -625,10 +682,14 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       els.qTotal.textContent = String(pool.length);
     }
     renderHistory(q);
+    els.qLabel.textContent = q.label || "";
+    els.qLabel.classList.toggle("hidden", !q.label);
+    // 한 번에 채점하는 실전(암송)에서는 마지막 문제의 버튼이 채점 버튼이 된다
+    els.nextBtn.textContent = (q.deferGrade && idx === pool.length - 1) ? "채점하기" : "다음";
 
     if (q.type === "sa") {
-      els.qTypeBadge.textContent = "주관식";
-      els.qTypeBadge.className = "type-badge sa";
+      els.qTypeBadge.textContent = q.badge || "주관식";
+      els.qTypeBadge.className = "type-badge " + (q.verse ? "verse" : "sa");
       els.qText.classList.add("hidden");
       els.qOptions.classList.add("hidden");
       els.qSaQuestion.classList.remove("hidden");
@@ -636,11 +697,29 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       renderSAWithBlanks(q.q, q.answer, els.qSaQuestion);
       els.submitBtn.disabled = false;
       els.hintBtn.disabled = false;
-      els.hintBtn.classList.toggle("hidden", examMode);
+      els.submitBtn.classList.toggle("hidden", !!q.deferGrade);
+      els.hintBtn.classList.toggle("hidden", examMode || !!q.deferGrade);
       els.qSaQuestion.querySelectorAll(".blank-input").forEach((inp) => {
+        if (q.instantCheck) {
+          // 연습: 빈칸을 벗어나면(change) 그 빈칸만 바로 채점
+          inp.addEventListener("change", () => instantCheckBlank(inp, false));
+          inp.addEventListener("input", () => inp.classList.remove("wrong"));
+        }
         inp.addEventListener("keydown", (e) => {
           if (e.key !== "Enter") return;
           e.preventDefault();
+          if (q.instantCheck) {
+            // 한글 조합이 끝난 뒤 값을 읽도록 한 틱 미룬다
+            setTimeout(() => instantCheckBlank(inp, true), 0);
+            return;
+          }
+          if (q.deferGrade) {
+            const all = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
+            const nextEmpty = all.find((i2) => i2 !== inp && i2.value.trim() === "");
+            if (nextEmpty) nextEmpty.focus();
+            else els.nextBtn.focus();
+            return;
+          }
           if (answered) { submitSA(); return; }
           const editable = Array.from(els.qSaQuestion.querySelectorAll(".blank-input:not([disabled])"));
           const empty = editable.find((i2) => i2.value.trim() === "");
@@ -672,6 +751,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     // Restore previously visited state (back/forward nav)
     const saved = stateByIdx.get(idx);
     if (saved) restoreQuestionState(saved);
+    if (q.deferGrade) els.nextBtn.disabled = false; // 채점 전에는 자유롭게 이동
 
     // Focus appropriately
     if (q.type === "sa" && !answered) {
@@ -721,6 +801,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   function submitSA() {
     if (answered) return;
     const q = pool[idx];
+    if (q.deferGrade) return;                     // 실전(암송)은 마지막에 한 번에 채점
+    if (q.instantCheck) { submitInstant(); return; }
     const inputs = Array.from(els.qSaQuestion.querySelectorAll(".blank-input"));
     if (inputs.length === 0) return;
     const userValues = inputs.map((inp) => inp.value);
@@ -899,21 +981,24 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     if (level === 3) return firstCharPlusChosung(answerPart);
     return "";
   }
+  // Record hint usage per question (max level reached, total clicks)
+  function recordHintUse(id, level) {
+    if (!getCurrentUser()) return;
+    if (!currentData.hints) currentData.hints = {};
+    if (!currentData.hints[id]) currentData.hints[id] = { maxLevel: 0, clicks: 0 };
+    currentData.hints[id].clicks++;
+    if (level > currentData.hints[id].maxLevel) {
+      currentData.hints[id].maxLevel = level;
+    }
+    persistCurrentUserData();
+  }
   function showHint() {
     if (answered) return;
     const q = pool[idx];
     if (q.type !== "sa") return;
     if (hintLevel >= 3) return;
     hintLevel++;
-    // Record hint usage per question (max level reached, total clicks)
-    const id = qid(q);
-    if (!currentData.hints) currentData.hints = {};
-    if (!currentData.hints[id]) currentData.hints[id] = { maxLevel: 0, clicks: 0 };
-    currentData.hints[id].clicks++;
-    if (hintLevel > currentData.hints[id].maxLevel) {
-      currentData.hints[id].maxLevel = hintLevel;
-    }
-    persistCurrentUserData();
+    recordHintUse(qid(q), hintLevel);
     const labels = { 1: "글자수", 2: "초성", 3: "첫 글자" };
     els.hintLabel.textContent = `(${hintLevel}/3 · ${labels[hintLevel]})`;
 
@@ -925,10 +1010,12 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
       inputs.forEach((inp, i) => {
         const badge = inp.parentElement?.querySelector(".blank-hint");
         if (!badge) return;
+        if (q.instantCheck) { updateBlankHint(inp, expected[i]); return; }
         badge.textContent = hintFor(expected[i], hintLevel);
         badge.classList.remove("hidden");
       });
       els.qHint.innerHTML = "";
+      if (q.instantCheck) renderHintLegend();
     } else {
       // Count mismatch fallback — show single hint in the bottom area
       els.qHint.innerHTML = "";
@@ -957,8 +1044,10 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   function nextQuestion() {
     if (practiceMode) { nextPractice(); return; }
     captureCurrentState();
-    if (idx + 1 >= pool.length) showResult();
-    else { idx++; renderQuestion(); }
+    if (idx + 1 >= pool.length) {
+      if (pool[idx].deferGrade && !gradeDeferredExam()) return; // 채점 취소 → 계속 풀기
+      showResult();
+    } else { idx++; renderQuestion(); }
   }
   function nextPractice() {
     const wasCorrect = stateByIdx.get(idx)?.correct === true;
@@ -968,13 +1057,14 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     } else {
       // keep in pool but move to end so it doesn't immediately reappear
       const cur = pool.splice(idx, 1)[0];
-      pool.push(cur);
+      // 암송 구절은 다시 나올 때 빈칸 위치를 새로 뽑는다
+      pool.push(cur.unit ? makeVerseQuestion(cur.unit, verseLevel, { instantCheck: true }) : cur);
     }
     if (pool.length === 0) {
       showResult();
       return;
     }
-    pool = shuffle(pool);
+    if (!verseMode) pool = shuffle(pool); // 암송은 말씀 순서를 유지
     idx = 0;
     stateByIdx.clear();
     renderQuestion();
@@ -982,6 +1072,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   function showResult() {
     els.playCard.classList.add("hidden");
     els.resultCard.classList.remove("hidden");
+    els.resultNote.classList.add("hidden");
+    els.resultNote.textContent = "";
     if (practiceMode) {
       els.score.textContent = String(practiceTarget);
       els.scoreTotal.textContent = `${practiceTarget} · 총 시도 ${practiceTotalAttempts}회`;
@@ -990,10 +1082,21 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     } else {
       els.score.textContent = String(calcScore());
       els.scoreTotal.textContent = String(calcMaxScore());
-      if (examMode) renderExamReport();
+      if (verseMode === "exam") renderVerseExamReport();
+      else if (examMode) renderExamReport();
       else { els.resultReport.classList.add("hidden"); els.resultReport.innerHTML = ""; }
     }
     updateModeLabel();
+    updateResultVerseBtn();
+  }
+  // 암송 모드가 끝나면 다음 단계(오답노트 → 전체 쓰기)로 바로 갈 수 있는 버튼을 보여 준다
+  function updateResultVerseBtn() {
+    const btn = els.resultVerseBtn;
+    if (!verseMode) { btn.classList.add("hidden"); return; }
+    const wrongCount = getVerseWrongCount();
+    btn.dataset.verseMode = wrongCount > 0 ? "wrong" : "full";
+    btn.textContent = wrongCount > 0 ? `암송 오답노트 풀기 (${wrongCount})` : "전체 쓰기 도전";
+    btn.classList.remove("hidden");
   }
 
   function renderExamReport() {
@@ -1017,17 +1120,488 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     });
     els.resultReport.innerHTML = `<h3 class="report-title">상세 리포트</h3>${cards.join("")}`;
   }
+  // 퀴즈 도중 나가기: 이미 채점된 문제의 기록은 남고, 풀던 문제는 버린다
+  function quitQuiz() {
+    const q = pool[idx];
+    const msg = q && q.deferGrade
+      ? "지금 나가면 채점하지 않은 답은 사라져요. 그래도 나갈까요?"
+      : "퀴즈를 그만하고 처음 화면으로 나갈까요?";
+    if (!confirm(msg)) return;
+    els.playCard.classList.add("hidden");
+    restart();
+  }
   function restart() {
+    verseMode = null;
     els.resultCard.classList.add("hidden");
+    vfEls.card.classList.add("hidden");
     els.startCard.classList.remove("hidden");
+    updateModeLabel();
   }
 
-  $$(".mode-btn").forEach((btn) => {
+  // ---------- 암송 구절 (시편 23편): 빈칸 채우기 연습/실전/오답노트 + 전체 쓰기 ----------
+  const LS_VERSE_LEVEL = "bq_verseLevel";
+  const VERSE_LEVELS = {
+    easy:   { label: "쉬움",   ratio: 0.3,  desc: "빈칸 조금 — 단어 10개 중 3개쯤" },
+    normal: { label: "보통",   ratio: 0.55, desc: "절반 정도가 빈칸" },
+    hard:   { label: "어려움", ratio: 0.85, desc: "거의 모든 단어가 빈칸" },
+  };
+  let verseLevel = localStorage.getItem(LS_VERSE_LEVEL);
+  if (!VERSE_LEVELS[verseLevel]) verseLevel = "easy";
+
+  function verseBlankCount(wordCount, level) {
+    const k = Math.round(wordCount * VERSE_LEVELS[level].ratio);
+    return Math.max(1, Math.min(wordCount, k));
+  }
+  // 한 단위(절/부분)에서 난이도만큼 단어를 무작위로 비워 주관식 문제를 만든다
+  function makeVerseQuestion(unit, level, opts = {}) {
+    const words = unit.text.split(" ");
+    const picked = new Set(shuffle(words.map((_, i) => i)).slice(0, verseBlankCount(words.length, level)));
+    const body = words.map((w, i) => (picked.has(i) ? "(   )" : w)).join(" ");
+    const lead = unit.partIdx > 0 ? "… " : "";
+    const tail = unit.partIdx < unit.partCount - 1 ? " …" : "";
+    return {
+      type: "sa",
+      id: unit.id,
+      unit,
+      verse: true,
+      badge: `암송 · ${VERSE_LEVELS[level].label}`,
+      label: unit.label,
+      q: lead + body + tail,
+      answer: words.filter((_, i) => picked.has(i)).join(" / "),
+      ref: `${VERSE.title} (${VERSE.version})`,
+      wrongClearStreak: 3,
+      ...opts,
+    };
+  }
+
+  function startVerse(mode) {
+    if (!VERSE) return;
+    if (mode === "full") { startVerseFull(); return; }
+    let units = VERSE_UNITS;
+    if (mode === "wrong") {
+      const wrongIds = getWrongIds();
+      units = units.filter((u) => wrongIds.has(u.id));
+      if (units.length === 0) {
+        alert("암송 오답노트가 비어 있어요. 연습이나 실전에서 틀린 구절이 여기에 모여요.");
+        return;
+      }
+    }
+    verseMode = mode;
+    examMode = false;
+    practiceMode = (mode !== "exam"); // 연습·오답노트: 모두 맞출 때까지 반복
+    const opts = mode === "exam" ? { deferGrade: true } : { instantCheck: true };
+    pool = units.map((u) => makeVerseQuestion(u, verseLevel, opts));
+    practiceTarget = pool.length;
+    practiceTotalAttempts = 0;
+    idx = 0;
+    stateByIdx.clear();
+    els.startCard.classList.add("hidden");
+    els.resultCard.classList.add("hidden");
+    vfEls.card.classList.add("hidden");
+    els.playCard.classList.remove("hidden");
+    renderQuestion();
+  }
+
+  // --- 연습/오답노트: 빈칸 하나를 쓰자마자 채점, 틀리면 그 칸에 힌트가 자동으로 붙는다 ---
+  function setFeedback(msg, cls) {
+    els.qFeedback.textContent = msg;
+    els.qFeedback.className = "feedback" + (cls ? " " + cls : "");
+  }
+  function allBlanks() { return Array.from(els.qSaQuestion.querySelectorAll(".blank-input")); }
+  function openBlanks() { return allBlanks().filter((inp) => !inp.disabled); }
+  function focusNextOpenBlank(from) {
+    const open = openBlanks();
+    if (open.length === 0) return;
+    const all = allBlanks();
+    const start = all.indexOf(from);
+    const target = open.find((i2) => all.indexOf(i2) > start && i2.value.trim() === "")
+      || open.find((i2) => i2.value.trim() === "")
+      || open.find((i2) => i2 !== from)
+      || open[0];
+    target.focus();
+    try { target.select(); } catch {}
+  }
+  // 빈칸 위 힌트 칩 (연습): 이미 맞힌 자리는 글자를 그대로 보여 주고,
+  // 아직 틀린 자리만 단계별 힌트로 보여 준다 — 1 ○(글자수), 2 초성, 3 이상은 앞에서부터 한 글자씩 공개.
+  function knownPositions(inp) {
+    return new Set((inp.dataset.known || "").split(",").filter(Boolean).map(Number));
+  }
+  function blankHintParts(expected, level, known) {
+    let toReveal = Math.max(0, level - 2);
+    return Array.from(expected).map((ch, i) => {
+      if (known.has(i)) return { ch, known: true };
+      if (level <= 1) return { ch: "○" };
+      if (toReveal > 0) { toReveal--; return { ch }; }
+      return { ch: toChosung(ch) };
+    });
+  }
+  // 단계 = 힌트 버튼 단계와 그 칸에서 틀린 횟수 중 더 높은 쪽
+  function updateBlankHint(inp, expected) {
+    const badge = inp.parentElement?.querySelector(".blank-hint");
+    if (!badge) return "";
+    const level = Math.max(hintLevel, Number(inp.dataset.misses || 0));
+    if (level <= 0) return "";
+    const parts = blankHintParts(expected, level, knownPositions(inp));
+    badge.innerHTML = parts
+      .map((p) => (p.known ? `<span class="hint-known">${escapeHtml(p.ch)}</span>` : escapeHtml(p.ch)))
+      .join("");
+    badge.classList.remove("hidden");
+    return parts.map((p) => p.ch).join("");
+  }
+  function renderHintLegend() {
+    els.qHint.innerHTML = els.qSaQuestion.querySelector(".blank-input[data-misses]")
+      ? '<span class="diff-legend">빈칸 위 힌트 — <span class="hint-known">초록 글자</span>는 맞은 자리, ○·초성은 다시 써야 할 자리</span>'
+      : "";
+  }
+  function instantCheckBlank(inp, advance) {
+    const q = pool[idx];
+    if (answered || !q || !q.instantCheck) return;
+    if (!inp.isConnected || inp.disabled) return; // 이미 넘어간 문제의 늦은 이벤트
+    const val = inp.value;
+    if (!val.trim()) return;
+    if (inp.dataset.checked === val) return;      // 같은 답을 또 확인하면 횟수를 깎지 않는다
+    inp.dataset.checked = val;
+    const expected = splitExpected(q.answer)[Number(inp.dataset.idx)] || "";
+    if (equalAnswer(val, expected)) {
+      inp.classList.remove("wrong");
+      inp.classList.add("correct");
+      inp.disabled = true;
+      setFeedback("맞았어요!", "correct");
+    } else {
+      // 틀릴 때마다 그 칸의 힌트가 한 단계씩 올라간다 (1 글자수 → 2 초성 → 3부터 한 글자씩).
+      // 글자 수가 맞으면 자리별로 비교해서, 맞은 글자는 힌트에 그대로 남기고 틀린 자리만 힌트로 보여 준다.
+      const misses = Number(inp.dataset.misses || 0) + 1;
+      inp.dataset.misses = String(misses);
+      inp.dataset.lastWrong = val.trim();
+      inp.classList.remove("correct");
+      inp.classList.add("wrong");
+      const userChars = Array.from(normalize(val));
+      const expChars = Array.from(expected);
+      const lenOk = userChars.length === expChars.length;
+      if (lenOk) {
+        const known = knownPositions(inp);
+        expChars.forEach((ch, i) => { if (userChars[i] === ch) known.add(i); });
+        inp.dataset.known = Array.from(known).join(",");
+      }
+      const shown = updateBlankHint(inp, expected);
+      renderHintLegend();
+      const head = lenOk ? "글자 수는 맞아요" : `글자 수가 달라요 (${expChars.length}글자)`;
+      const tail = misses === 1 ? (lenOk ? "○ 자리만 다시 써 보세요" : "다시 써 보세요")
+        : misses === 2 ? "틀린 자리의 초성 힌트를 보세요"
+        : "틀린 자리를 한 글자 더 알려 줄게요";
+      setFeedback(shown === expected ? "정답을 보고 그대로 따라 써 보세요" : `${head} — ${tail}`, "retry");
+      inp.classList.remove("shake");
+      void inp.offsetWidth; // restart animation
+      inp.classList.add("shake");
+      if (advance) { inp.focus(); try { inp.select(); } catch {} }
+      return;
+    }
+    if (openBlanks().length === 0) finalizeInstant();
+    else if (advance) focusNextOpenBlank(inp);
+  }
+  function submitInstant() {
+    const open = openBlanks();
+    const filled = open.filter((inp) => inp.value.trim() !== "");
+    if (filled.length === 0) { open[0]?.focus(); return; }
+    filled.forEach((inp) => instantCheckBlank(inp, false));
+    if (answered) return;
+    const rest = openBlanks();
+    const target = rest.find((inp) => inp.classList.contains("wrong"))
+      || rest.find((inp) => inp.value.trim() === "")
+      || rest[0];
+    if (target) { target.focus(); try { target.select(); } catch {} }
+  }
+  function finalizeInstant() {
+    const q = pool[idx];
+    const inputs = allBlanks();
+    const missesOf = (inp) => Number(inp.dataset.misses || 0);
+    const hadMiss = inputs.some((inp) => missesOf(inp) > 0);
+    // 한 칸을 2번 이상 틀렸으면(초성 힌트까지 받았으면) 오답으로 기록 → 오답노트 + 뒤에 다시 출제
+    const struggled = inputs.filter((inp) => missesOf(inp) >= MAX_ATTEMPTS).length;
+    answered = true;
+    els.submitBtn.disabled = true;
+    els.hintBtn.disabled = true;
+    // 기록에는 여러 번 틀린 칸의 마지막 오답을 남긴다
+    const userStr = inputs
+      .map((inp) => (missesOf(inp) >= MAX_ATTEMPTS ? inp.dataset.lastWrong || "" : inp.value.trim()) || "(빈칸)")
+      .join(" / ");
+    setUserAnswerStr(userStr);
+    if (struggled === 0) {
+      markCorrect(hadMiss ? "정답! (재시도 성공)" : "정답!");
+      recordAnswer(q, true);
+    } else {
+      markWrong(`다 채웠어요! 여러 번 틀린 칸이 ${struggled}개 있어서 조금 뒤에 다시 나와요`);
+      recordAnswer(q, false, userStr);
+    }
+    updateModeLabel();
+  }
+
+  // --- 실전: 끝까지 푼 뒤 한 번에 채점 ---
+  function gradeDeferredExam() {
+    let empty = 0;
+    const graded = pool.map((q, i) => {
+      const s = stateByIdx.get(i) || {};
+      const blanks = splitExpected(q.answer).map((exp, k) => {
+        const user = (s.saInputs?.[k]?.value || "").trim();
+        if (!user) empty++;
+        return { user, expected: exp, ok: equalAnswer(user, exp) };
+      });
+      return { i, q, s, blanks };
+    });
+    if (empty > 0 && !confirm(`아직 안 쓴 빈칸이 ${empty}개 있어요. 그래도 채점할까요?`)) return false;
+    graded.forEach(({ i, q, s, blanks }) => {
+      const ok = blanks.every((b) => b.ok);
+      s.type = "sa";
+      s.answered = true;
+      s.correct = ok;
+      s.blankResults = blanks;
+      s.userAnswerStr = blanks.some((b) => b.user)
+        ? blanks.map((b) => b.user || "(빈칸)").join(" / ")
+        : "";
+      stateByIdx.set(i, s);
+      recordAnswer(q, ok, s.userAnswerStr);
+    });
+    return true;
+  }
+  function renderVerseExamReport() {
+    let blankOk = 0, blankTotal = 0, wrongQ = 0;
+    const cards = pool.map((q, i) => {
+      const s = stateByIdx.get(i) || {};
+      const blanks = s.blankResults || [];
+      if (s.correct !== true) wrongQ++;
+      let k = 0, last = 0, body = "";
+      for (const m of q.q.matchAll(BLANK_RE)) {
+        body += escapeHtml(q.q.slice(last, m.index));
+        const b = blanks[k++] || { user: "", expected: "", ok: false };
+        blankTotal++;
+        if (b.ok) {
+          blankOk++;
+          body += `<span class="rb rb-ok">${escapeHtml(b.expected)}</span>`;
+        } else {
+          body += `<span class="rb rb-bad">${escapeHtml(b.user || "빈칸")}</span><span class="rb rb-ans">${escapeHtml(b.expected)}</span>`;
+        }
+        last = m.index + m[0].length;
+      }
+      body += escapeHtml(q.q.slice(last));
+      const pip = s.correct === true ? '<span class="pip pip-o">O</span>' : '<span class="pip pip-x">X</span>';
+      return `
+        <div class="q-stat-card">
+          <div class="q-row">${pip} <span class="type-badge verse">${escapeHtml(q.label)}</span></div>
+          <div class="verse-report-body">${body}</div>
+        </div>`;
+    });
+    els.resultNote.textContent = `빈칸 ${blankOk} / ${blankTotal}개 정답`
+      + (wrongQ > 0 ? ` · 틀린 ${wrongQ}문제는 암송 오답노트에 담았어요.` : " · 모두 맞았어요! 이제 전체 쓰기에 도전해 보세요.");
+    els.resultNote.classList.remove("hidden");
+    els.resultReport.classList.remove("hidden");
+    els.resultReport.innerHTML = `<h3 class="report-title">상세 리포트 — <span class="rb rb-bad">내가 쓴 답</span><span class="rb rb-ans">정답</span></h3>${cards.join("")}`;
+  }
+
+  // --- 최종: 모든 구절 전체 쓰기 ---
+  const vfEls = {
+    card: $("#verse-full"),
+    title: $("#vf-title"),
+    list: $("#vf-list"),
+    feedback: $("#vf-feedback"),
+    quitBtn: $("#vf-quit-btn"),
+    retryBtn: $("#vf-retry-btn"),
+    submitBtn: $("#vf-submit-btn"),
+  };
+  let vfGraded = false;
+  let vfWrongVerses = [];
+  // 띄어쓰기·문장부호를 뺀 글자만 비교
+  function stripForCompare(s) {
+    return String(s || "").replace(/[\s.,!?·'"“”‘’~\-]/g, "");
+  }
+  // 최장 공통 부분열로 맞은 글자를 표시 (공백은 비교에서 제외)
+  function lcsMarks(a, b) {
+    const n = a.length, m = b.length;
+    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const ma = new Array(n).fill(false), mb = new Array(m).fill(false);
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { ma[i] = true; mb[j] = true; i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+      else j++;
+    }
+    return [ma, mb];
+  }
+  function verseDiffHtml(userText, correctText) {
+    const uChars = Array.from(userText.trim().replace(/\s+/g, " "));
+    const cChars = Array.from(correctText);
+    const keep = (ch) => stripForCompare(ch) !== "";
+    const [mu, mc] = lcsMarks(uChars.filter(keep), cChars.filter(keep));
+    const paint = (chars, marks, okCls, badCls) => {
+      let k = 0;
+      return chars.map((ch) => {
+        if (!keep(ch)) return escapeHtml(ch);
+        const cls = marks[k++] ? okCls : badCls;
+        return cls ? `<span class="${cls}">${escapeHtml(ch)}</span>` : escapeHtml(ch);
+      }).join("");
+    };
+    return {
+      user: uChars.length ? paint(uChars, mu, "char-ok", "char-bad") : '<span class="muted-text">(안 씀)</span>',
+      correct: paint(cChars, mc, "", "char-miss"),
+    };
+  }
+  function verseFullHint(text, level) {
+    if (level === 3) return text.split(" ").map(firstCharPlusChosung).join(" "); // 단어마다 첫 글자
+    return hintFor(text, level);
+  }
+  function startVerseFull(onlyVerses) {
+    if (!VERSE) return;
+    verseMode = "full";
+    practiceMode = false;
+    examMode = false;
+    vfGraded = false;
+    vfWrongVerses = [];
+    const verses = VERSE.verses.filter((v) => !onlyVerses || onlyVerses.includes(v.n));
+    vfEls.title.textContent = `${VERSE.title} 전체 쓰기` + (onlyVerses ? " — 틀린 절 다시" : "");
+    vfEls.list.innerHTML = "";
+    const hintLabels = { 1: "글자수", 2: "초성", 3: "첫 글자" };
+    verses.forEach((v) => {
+      const row = document.createElement("div");
+      row.className = "vf-row";
+      row.dataset.n = String(v.n);
+      row.innerHTML = `
+        <div class="vf-head">
+          <span class="vf-num">${v.n}절</span>
+          <button class="secondary vf-hint-btn" type="button">힌트 보기 (0/3)</button>
+        </div>
+        <div class="vf-hint hidden"></div>
+        <textarea class="vf-input" rows="2" autocomplete="off" spellcheck="false" placeholder="${v.n}절을 써 보세요"></textarea>
+        <div class="vf-result"></div>`;
+      const ta = row.querySelector(".vf-input");
+      const hintBtn = row.querySelector(".vf-hint-btn");
+      const hintBox = row.querySelector(".vf-hint");
+      let level = 0;
+      hintBtn.addEventListener("click", () => {
+        if (vfGraded || level >= 3) return;
+        level++;
+        recordHintUse(verseFullId(v.n), level);
+        hintBox.textContent = verseFullHint(verseFullText(v), level);
+        hintBox.classList.remove("hidden");
+        hintBtn.textContent = `힌트 보기 (${level}/3 · ${hintLabels[level]})`;
+        if (level === 3) hintBtn.disabled = true;
+        ta.focus();
+      });
+      ta.addEventListener("input", () => {
+        ta.style.height = "auto";
+        ta.style.height = ta.scrollHeight + 2 + "px";
+      });
+      ta.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault(); // 한 절은 한 줄 — Enter는 다음 절로 이동
+        const all = Array.from(vfEls.list.querySelectorAll(".vf-input"));
+        const next = all[all.indexOf(ta) + 1];
+        if (next) next.focus();
+        else vfEls.submitBtn.focus();
+      });
+      vfEls.list.appendChild(row);
+    });
+    vfEls.feedback.textContent = "";
+    vfEls.feedback.className = "feedback";
+    vfEls.submitBtn.classList.remove("hidden");
+    vfEls.retryBtn.classList.add("hidden");
+    vfEls.quitBtn.textContent = "그만하기";
+    els.startCard.classList.add("hidden");
+    els.playCard.classList.add("hidden");
+    els.resultCard.classList.add("hidden");
+    vfEls.card.classList.remove("hidden");
+    vfEls.list.querySelector(".vf-input")?.focus();
+  }
+  function gradeVerseFull() {
+    if (vfGraded) return;
+    const rows = Array.from(vfEls.list.querySelectorAll(".vf-row"));
+    const emptyCount = rows.filter((row) => !row.querySelector(".vf-input").value.trim()).length;
+    if (emptyCount === rows.length) { rows[0]?.querySelector(".vf-input").focus(); return; }
+    if (emptyCount > 0 && !confirm(`아직 안 쓴 절이 ${emptyCount}개 있어요. 그래도 채점할까요?`)) return;
+    vfGraded = true;
+    vfWrongVerses = [];
+    rows.forEach((row) => {
+      const n = Number(row.dataset.n);
+      const v = VERSE.verses.find((x) => x.n === n);
+      const correctText = verseFullText(v);
+      const ta = row.querySelector(".vf-input");
+      const userText = ta.value;
+      const ok = stripForCompare(userText) === stripForCompare(correctText);
+      ta.disabled = true;
+      ta.classList.add(ok ? "correct" : "wrong");
+      row.querySelector(".vf-hint-btn").disabled = true;
+      const result = row.querySelector(".vf-result");
+      if (ok) {
+        result.innerHTML = '<span class="pip pip-o">O</span> 정확해요!';
+      } else {
+        vfWrongVerses.push(n);
+        const diff = verseDiffHtml(userText, correctText);
+        result.innerHTML = `
+          <div><span class="pip pip-x">X</span> <span class="vf-line-label">내가 쓴 것</span>${diff.user}</div>
+          <div><span class="vf-line-label">정답</span>${diff.correct}</div>`;
+      }
+      recordAnswer(
+        { id: verseFullId(n), q: `${VERSE.refPrefix}${n} 전체 쓰기`, noWrongNote: true },
+        ok,
+        userText.trim().replace(/\s+/g, " ")
+      );
+    });
+    const okCount = rows.length - vfWrongVerses.length;
+    if (vfWrongVerses.length === 0) {
+      vfEls.feedback.textContent = rows.length === VERSE.verses.length
+        ? `완벽해요! ${VERSE.title}을 모두 외웠어요!`
+        : "다시 쓴 절을 모두 맞혔어요!";
+      vfEls.feedback.className = "feedback correct";
+    } else {
+      vfEls.feedback.textContent = `${okCount} / ${rows.length}절 정답 — 노란 글자가 빠뜨리거나 틀린 부분이에요`;
+      vfEls.feedback.className = "feedback wrong";
+    }
+    vfEls.submitBtn.classList.add("hidden");
+    vfEls.retryBtn.classList.toggle("hidden", vfWrongVerses.length === 0);
+    vfEls.quitBtn.textContent = "처음으로";
+    (vfWrongVerses.length ? vfEls.retryBtn : vfEls.quitBtn).focus();
+  }
+
+  // --- 시작 화면: 난이도 선택 + 말씀 보기 ---
+  function renderVerseLevel() {
+    $$(".level-btn").forEach((btn) => btn.classList.toggle("active", btn.dataset.level === verseLevel));
+    const desc = $("#level-desc");
+    if (desc) desc.textContent = VERSE_LEVELS[verseLevel].desc;
+  }
+  if (VERSE) {
+    $("#verse-card").classList.remove("hidden");
+    $("#verse-title").textContent = VERSE.title;
+    $("#verse-version").textContent = `(${VERSE.version})`;
+    $("#verse-exam-count").textContent = String(VERSE_UNITS.length);
+    $("#verse-text-list").innerHTML = VERSE.verses
+      .map((v) => `<li value="${v.n}">${escapeHtml(verseFullText(v))}</li>`).join("");
+    renderVerseLevel();
+    $$(".level-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        verseLevel = btn.dataset.level;
+        localStorage.setItem(LS_VERSE_LEVEL, verseLevel);
+        renderVerseLevel();
+      });
+    });
+    $$("[data-verse-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => startVerse(btn.dataset.verseMode));
+    });
+    vfEls.submitBtn.addEventListener("click", gradeVerseFull);
+    vfEls.retryBtn.addEventListener("click", () => startVerseFull(vfWrongVerses.slice()));
+    vfEls.quitBtn.addEventListener("click", restart);
+    els.resultVerseBtn.addEventListener("click", () => startVerse(els.resultVerseBtn.dataset.verseMode));
+  }
+
+  $$(".mode-btn[data-preset]").forEach((btn) => {
     btn.addEventListener("click", () => startQuiz(btn.dataset.preset));
   });
   els.prevBtn.addEventListener("click", prevQuestion);
   els.nextBtn.addEventListener("click", nextQuestion);
   els.restartBtn.addEventListener("click", restart);
+  $("#quit-btn").addEventListener("click", quitQuiz);
   els.submitBtn.addEventListener("click", submitSA);
   els.hintBtn.addEventListener("click", showHint);
 
@@ -1150,7 +1724,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
           <div><span class="stat-key">마지막 접속</span> ${fmtDate(u.lastLoginAt)}</div>
           <div><span class="stat-key">마지막 활동</span> ${fmtDate(u.updatedAt)}</div>
           <div><span class="stat-key">총 시도</span> ${userTot}회 · <span class="stat-key">정답</span> ${userCorrect}회 · <span class="stat-key">정답률</span> ${userTot ? Math.round((userCorrect / userTot) * 100) : 0}%</div>
-          <div><span class="stat-key">푼 문제</span> ${distinct} / ${(window.QUESTIONS || []).length}개 · <span class="stat-key">오답노트</span> ${wrongCount}개 · <span class="stat-key">힌트</span> ${hintClicks}회 (${hintQuestions}개 문제)</div>
+          <div><span class="stat-key">푼 문제</span> ${distinct} / ${getTrackables().length}개 · <span class="stat-key">오답노트</span> ${wrongCount}개 · <span class="stat-key">힌트</span> ${hintClicks}회 (${hintQuestions}개 문제)</div>
         </div>
         <div class="admin-user-detail hidden"></div>
       `;
@@ -1196,7 +1770,8 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
   }
 
   function questionCardHtml(q, statsHtml) {
-    const typeLabel = q.type === "sa" ? "주관식" : "객관식";
+    const typeLabel = q.badge || (q.type === "sa" ? "주관식" : "객관식");
+    const typeClass = q.verse ? "verse" : q.type;
     const qHtml = q.type === "sa" ? saQuestionHtml(q) : escapeHtml(q.q);
     const optionsHtml = q.type === "mc" && Array.isArray(q.options)
       ? `<ul class="mini-options">${q.options.map((o, oi) => `<li${oi === q.answer ? ' class="is-answer"' : ""}>${escapeHtml(o)}</li>`).join("")}</ul>`
@@ -1208,7 +1783,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     return `
       <div class="q-stat-card">
         <div class="q-row">
-          <span class="type-badge ${q.type}">${typeLabel}</span><span class="q-body">${qHtml}</span>
+          <span class="type-badge ${typeClass}">${typeLabel}</span><span class="q-body">${qHtml}</span>
         </div>
         ${optionsHtml}
         ${answerRow}
@@ -1224,7 +1799,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     const lastAt = u.lastAt || {};
     const wrongAnswers = u.wrongAnswers || {};
     const wrongSet = new Set(u.wrong || []);
-    const sorted = [...(window.QUESTIONS || [])].sort((a, b) => {
+    const sorted = getTrackables().sort((a, b) => {
       const ta = lastAt[qid(a)] || 0;
       const tb = lastAt[qid(b)] || 0;
       return tb - ta; // most recent first
@@ -1266,7 +1841,7 @@ const { fetchUserData, pushUserData, touchUserLogin, fetchAllUsers } = await imp
     const wrongCount = u.wrong.length;
     const hintClicks = Object.values(u.hints).reduce((s, h) => s + (h.clicks || 0), 0);
     historyEls.summary.innerHTML =
-      `푼 문제 <b>${distinct}</b> / ${(window.QUESTIONS||[]).length}개 · 총 시도 <b>${totT}</b>회 · 정답 <b>${totC}</b>회 (${rate}%) · 오답노트 <b>${wrongCount}</b>개 · 힌트 <b>${hintClicks}</b>회`;
+      `푼 문제 <b>${distinct}</b> / ${getTrackables().length}개 · 총 시도 <b>${totT}</b>회 · 정답 <b>${totC}</b>회 (${rate}%) · 오답노트 <b>${wrongCount}</b>개 · 힌트 <b>${hintClicks}</b>회`;
     historyEls.detail.innerHTML = renderUserDetail(u);
   }
 
