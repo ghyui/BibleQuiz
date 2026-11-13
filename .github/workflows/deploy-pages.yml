@@ -1,0 +1,54 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Prepare site and Firebase configuration
+        env:
+          FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -R css js _site/
+          rm -f _site/js/firebase-config.example.js
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          let config;
+          try {
+            config = JSON.parse(process.env.FIREBASE_CONFIG || '');
+          } catch {
+            throw new Error('Set the FIREBASE_CONFIG repository secret to valid JSON.');
+          }
+          for (const key of ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId']) {
+            if (typeof config?.[key] !== 'string' || !config[key].trim()) {
+              throw new Error(`FIREBASE_CONFIG requires a non-empty ${key}.`);
+            }
+          }
+          writeFileSync('_site/js/firebase-config.js', `export const firebaseConfig = ${JSON.stringify(config)};\n`);
+          NODE
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

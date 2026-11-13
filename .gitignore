@@ -18,4 +18,5 @@ npm-debug.log*
 # Local secrets (do NOT commit)
 token.txt
 *.token
+/js/firebase-config.js
 

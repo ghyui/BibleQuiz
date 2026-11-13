@@ -1,14 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBkPuHEluAU-7nWki7Nc0RrH3T1kqa-C20",
-  authDomain: "biblequiz-c2ff6.firebaseapp.com",
-  projectId: "biblequiz-c2ff6",
-  storageBucket: "biblequiz-c2ff6.firebasestorage.app",
-  messagingSenderId: "393495899482",
-  appId: "1:393495899482:web:fdbb779cbfa9953dc41763",
-};
+import { firebaseConfig } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
